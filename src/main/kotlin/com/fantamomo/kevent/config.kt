@@ -16,3 +16,9 @@ fun configuration(event: Event?, block: EventConfigurationScope.() -> Unit) {
         throw EventConfigurationHolder(EventConfiguration(scope))
     }
 }
+
+@OptIn(ExperimentalContracts::class)
+fun emptyConfiguration(event: Event?) {
+    contract { returns() implies (event != null) }
+    if (event == null) throw EventConfigurationHolder(EventConfiguration.DEFAULT)
+}
