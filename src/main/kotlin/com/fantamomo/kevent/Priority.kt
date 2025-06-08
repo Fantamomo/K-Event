@@ -22,6 +22,7 @@ sealed interface Priority : Comparable<Priority> {
         object NORMAL : Standard(0)
         object LOW : Standard(-500)
         object LOWEST : Standard(-1000)
+        object MONITOR : Standard(Int.MIN_VALUE)
 
         companion object {
             private val entries by lazy { Collections.unmodifiableList(listOf(HIGHEST, HIGH, NORMAL, LOW, LOWEST)) }
@@ -35,6 +36,7 @@ sealed interface Priority : Comparable<Priority> {
                 "NORMAL" -> NORMAL
                 "LOW" -> LOW
                 "LOWEST" -> LOWEST
+                "MONITOR" -> MONITOR
                 else -> throw IllegalArgumentException("No object com.fantamomo.kevent.Priority.Standard.$value")
             }
         }
