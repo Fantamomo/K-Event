@@ -21,7 +21,7 @@ sealed interface Priority : Comparable<Priority> {
         object HIGH : Standard(500)
         object NORMAL : Standard(0)
         object LOW : Standard(-500)
-        object LOWEST : Standard(1000)
+        object LOWEST : Standard(-1000)
 
         companion object {
             private val entries by lazy { Collections.unmodifiableList(listOf(HIGHEST, HIGH, NORMAL, LOW, LOWEST)) }
