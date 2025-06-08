@@ -5,7 +5,7 @@ import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 
 @OptIn(ExperimentalContracts::class)
-fun configuration(event: Event?, block: EventConfigurationScope.() -> Unit) {
+fun configuration(event: Event?, @EventDsl block: EventConfigurationScope.() -> Unit) {
     contract {
         returns() implies (event != null)
         callsInPlace(block, InvocationKind.AT_MOST_ONCE)
