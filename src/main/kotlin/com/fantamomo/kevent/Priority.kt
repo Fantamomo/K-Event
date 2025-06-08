@@ -2,8 +2,10 @@ package com.fantamomo.kevent
 
 import java.util.Collections
 
-sealed interface Priority {
+sealed interface Priority : Comparable<Priority> {
     val priority: Int
+
+    override fun compareTo(other: Priority) = priority.compareTo(other.priority)
 
     sealed class Standard(override val priority: Int) : Priority {
 
