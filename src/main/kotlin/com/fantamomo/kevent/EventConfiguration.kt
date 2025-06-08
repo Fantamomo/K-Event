@@ -11,4 +11,8 @@ class EventConfiguration(private val data: Map<Key<*>, Any?>) {
 
     @Suppress("UNCHECKED_CAST")
     fun <T : Any> getValue(key: Key<T>): T = data[key] as T
+
+    companion object {
+        val DEFAULT = EventConfiguration(emptyMap())
+    }
 }
