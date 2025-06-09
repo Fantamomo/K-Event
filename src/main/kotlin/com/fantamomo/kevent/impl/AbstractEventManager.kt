@@ -22,100 +22,104 @@ import kotlin.reflect.jvm.isAccessible
 
 abstract class AbstractEventManager : EventManager {
 
-    protected val listenerMap: MutableMap<KClass<out Event>, MutableList<RegisteredListener<out Event>>> = mutableMapOf()
+    protected val listenerMap = mutableMapOf<KClass<out Event>, MutableList<RegisteredListener<out Event>>>()
 
     @Suppress("UNCHECKED_CAST")
     override fun register(listener: Listener) {
         for (method in listener::class.memberFunctions) {
             if (method.findAnnotation<Register>() == null) continue
             if (method.returnType.classifier != Unit::class) {
-                errorNotUnitReturnType(listener, method, method.returnType.classifier)
+                onInvalidReturnType(listener, method, method.returnType.classifier)
                 continue
             }
 
             val parameters = method.parameters.drop(1)
             if (parameters.size != 1) {
-                errorNotOneParameter(listener, method, parameters.size)
+                onInvalidParameterCount(listener, method, parameters.size)
                 continue
             }
 
             val param = parameters.first()
             val paramType = param.type.classifier as? KClass<*> ?: continue
             if (!paramType.isSubclassOf(Event::class)) {
-                errorNotEventParameter(listener, method, param)
+                onInvalidParameterType(listener, method, param)
                 continue
             }
             if (!param.type.isMarkedNullable) {
-                errorNotNullableParameter(listener, method, param)
+                onNonNullableParameter(listener, method, param)
                 continue
             }
-            val eventClass = paramType as KClass<Event>
 
+            val eventClass = paramType as KClass<Event>
             method.isAccessible = true
 
-            try {
+            val config = try {
                 method.call(listener, null)
-            } catch (ite: InvocationTargetException) {
-                val cause = ite.cause ?: continue
+                onMissingConfigurationException(listener, method)
+                continue
+            } catch (e: InvocationTargetException) {
+                val cause = e.cause
                 if (cause !is ConfigurationCapturedException) {
-                    errorUnrecognizedException(listener, method, cause)
+                    onUnexpectedException(listener, method, cause ?: e)
                     continue
                 }
-
-                val config = cause.configuration as EventConfiguration<Event>
-
-                val handler: (Event) -> Unit = { event -> method.call(listener, event) }
-
-                val registeredListener = RegisteredListener(listener, eventClass, config, handler)
-
-                listenerMap.computeIfAbsent(eventClass) { mutableListOf() }
-                    .add(registeredListener)
-
-                listenerMap[eventClass]!!.sortByDescending {
-                    it.configuration.getOrDefault(Key.PRIORITY)
-                }
-                continue
+                cause.configuration as EventConfiguration<Event>
             } catch (e: Exception) {
-                errorUnrecognizedException(listener, method, e)
+                onUnexpectedException(listener, method, e)
+                continue
             }
-            errorNoExceptionCaught(listener, method)
+
+            val handler: (Event) -> Unit = { event -> method.call(listener, event) }
+
+            val registeredListener = buildRegisteredListener(listener, eventClass, config, handler)
+            val list = listenerMap.computeIfAbsent(eventClass) { mutableListOf() }
+            list.add(registeredListener)
+            list.sortByDescending { it.configuration.getOrDefault(Key.PRIORITY) }
         }
     }
 
-    protected open fun errorNotUnitReturnType(listener: Listener, methode: KFunction<*>, real: KClassifier?) {}
+    protected open fun <E : Event> buildRegisteredListener(
+        listener: Listener,
+        eventClass: KClass<E>,
+        configuration: EventConfiguration<E>,
+        handler: (E) -> Unit
+    ) = RegisteredListener(listener, eventClass, configuration, handler)
 
-    protected open fun errorNotOneParameter(listener: Listener, methode: KFunction<*>, count: Int) {}
+    protected open fun onInvalidReturnType(listener: Listener, method: KFunction<*>, actual: KClassifier?) {}
+    protected open fun onInvalidParameterCount(listener: Listener, method: KFunction<*>, count: Int) {}
+    protected open fun onInvalidParameterType(listener: Listener, method: KFunction<*>, param: KParameter) {}
+    protected open fun onNonNullableParameter(listener: Listener, method: KFunction<*>, param: KParameter) {}
+    protected open fun onMissingConfigurationException(listener: Listener, method: KFunction<*>) {}
+    protected open fun onUnexpectedException(listener: Listener, method: KFunction<*>, e: Throwable) {}
 
-    protected open fun errorNotEventParameter(listener: Listener, methode: KFunction<*>, real: KParameter) {}
-
-    protected open fun errorNotNullableParameter(listener: Listener, methode: KFunction<*>, param: KParameter) {}
-
-    protected open fun errorNoExceptionCaught(listener: Listener, methode: KFunction<*>) {}
-
-    protected open fun errorUnrecognizedException(listener: Listener, methode: KFunction<*>, e: Throwable) {}
-
-    protected open fun <E : Event> handlerThrowException(listener: Listener, registeredListener: RegisteredListener<E>, event: E, e: Throwable) {}
+    protected open fun <E : Event> onHandlerException(
+        listener: Listener,
+        registeredListener: RegisteredListener<E>,
+        event: E,
+        e: Throwable
+    ) {}
 
     override fun dispatch(event: Event) {
         val eventClass = event::class
+        for ((registeredClass, listeners) in listenerMap) {
+            if (!eventClass.isSubclassOf(registeredClass)) continue
 
-        listenerMap.forEach { (registeredClass, listeners) ->
-            if (eventClass.isSubclassOf(registeredClass)) {
-                for (listener in listeners) {
-                    @Suppress("UNCHECKED_CAST")
-                    listener as RegisteredListener<Event>
-                    try {
-                        listener.handler(event)
-                    } catch (e: InvocationTargetException) {
-                        val cause = e.cause ?: continue
-                        handlerThrowException(listener.listener, listener, event, cause)
-                    }
+            for (listener in listeners) {
+                @Suppress("UNCHECKED_CAST")
+                listener as RegisteredListener<Event>
+                try {
+                    listener.handler(event)
+                } catch (e: InvocationTargetException) {
+                    val cause = e.cause ?: continue
+                    onHandlerException(listener.listener, listener, event, cause)
+                } catch (e: Exception) {
+                    onHandlerException(listener.listener, listener, event, e)
                 }
             }
         }
     }
 
-    protected class RegisteredListener<E : Event>(
+    protected open class RegisteredListener<E : Event>(
         val listener: Listener,
         val eventClass: KClass<E>,
         val configuration: EventConfiguration<E>,
