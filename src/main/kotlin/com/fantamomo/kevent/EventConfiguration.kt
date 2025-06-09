@@ -62,6 +62,14 @@ class EventConfiguration<E : Event>(private val data: Map<Key<*>, Any?>) {
     @Suppress("UNCHECKED_CAST")
     fun <T : Any> getValue(key: Key<T>): T = data[key] as T
 
+    /**
+     * Checks if the specified key exists in the configuration data.
+     *
+     * @param key The key to check for existence in the configuration.
+     * @return `true` if the key exists, `false` otherwise.
+     */
+    operator fun contains(key: Key<*>) = data.containsKey(key)
+
     companion object {
         /**
          * Default empty configuration used when no custom configuration is provided.
