@@ -5,13 +5,13 @@ import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 
 @OptIn(ExperimentalContracts::class)
-fun configuration(event: Event?, @EventDsl block: EventConfigurationScope.() -> Unit) {
+fun <E : Event> configuration(event: E?, @EventDsl block: EventConfigurationScope<E>.() -> Unit) {
     contract {
         returns() implies (event != null)
         callsInPlace(block, InvocationKind.AT_MOST_ONCE)
     }
     if (event == null) {
-        val scope = EventConfigurationScope()
+        val scope = EventConfigurationScope<E>()
         scope.block()
         throw EventConfigurationHolder(EventConfiguration(scope))
     }
