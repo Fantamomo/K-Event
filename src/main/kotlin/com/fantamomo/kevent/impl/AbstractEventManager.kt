@@ -94,6 +94,8 @@ abstract class AbstractEventManager : EventManager {
 
     protected open fun errorUnrecognizedException(listener: Listener, methode: KFunction<*>, e: Throwable) {}
 
+    protected open fun <E : Event> handlerThrowException(listener: Listener, registeredListener: RegisteredListener<E>, event: E, e: Throwable) {}
+
     override fun dispatch(event: Event) {
         val eventClass = event::class
 
@@ -101,7 +103,13 @@ abstract class AbstractEventManager : EventManager {
             if (eventClass.isSubclassOf(registeredClass)) {
                 for (listener in listeners) {
                     @Suppress("UNCHECKED_CAST")
-                    (listener as RegisteredListener<Event>).handler(event)
+                    listener as RegisteredListener<Event>
+                    try {
+                        listener.handler(event)
+                    } catch (e: InvocationTargetException) {
+                        val cause = e.cause ?: continue
+                        handlerThrowException(listener.listener, listener, event, cause)
+                    }
                 }
             }
         }
