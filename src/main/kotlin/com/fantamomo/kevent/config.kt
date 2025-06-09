@@ -38,10 +38,10 @@ import kotlin.contracts.contract
  * 
  * @param event The event being handled, which may be null during initialization
  * @param block A configuration block that sets options for this event handler
- * @throws EventConfigurationHolder during initialization to pass configuration data
+ * @throws ConfigurationCapturedException during initialization to pass configuration data
  * 
  * @see EventConfigurationScope
- * @see EventConfigurationHolder
+ * @see ConfigurationCapturedException
  *
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
@@ -55,7 +55,7 @@ fun <E : Event> configuration(event: E?, @EventDsl block: EventConfigurationScop
     if (event == null) {
         val scope = EventConfigurationScope<E>()
         scope.block()
-        throw EventConfigurationHolder(EventConfiguration(scope))
+        throw ConfigurationCapturedException(EventConfiguration(scope))
     }
 }
 
@@ -86,10 +86,10 @@ fun <E : Event> configuration(event: E?, @EventDsl block: EventConfigurationScop
  * ```
  * 
  * @param event The event being handled, which may be null during initialization
- * @throws EventConfigurationHolder during initialization to pass default configuration data
+ * @throws ConfigurationCapturedException during initialization to pass default configuration data
  * 
  * @see configuration
- * @see EventConfigurationHolder
+ * @see ConfigurationCapturedException
  *
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
@@ -97,5 +97,5 @@ fun <E : Event> configuration(event: E?, @EventDsl block: EventConfigurationScop
 @OptIn(ExperimentalContracts::class)
 fun emptyConfiguration(event: Event?) {
     contract { returns() implies (event != null) }
-    if (event == null) throw EventConfigurationHolder(EventConfiguration.DEFAULT)
+    if (event == null) throw ConfigurationCapturedException(EventConfiguration.DEFAULT)
 }
