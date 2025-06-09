@@ -9,7 +9,7 @@ package com.fantamomo.kevent
  * 3. Must begin with either `configuration(event) { ... }` or `emptyConfiguration(event)`.
  * 
  * During the registration process, each annotated method is invoked with `null` as the event parameter.
- * This triggers a special [EventConfigurationHolder] exception that carries the configuration data
+ * This triggers a special [ConfigurationCapturedException] exception that carries the configuration data
  * defined in the method's configuration block.
  * 
  * Example usage:
