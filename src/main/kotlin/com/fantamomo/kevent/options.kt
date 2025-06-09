@@ -15,7 +15,7 @@ package com.fantamomo.kevent
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
-var <E : Event> EventConfigurationScope<E>.priority: Priority
+var EventConfigurationScope<*>.priority: Priority
     get() = getOrDefault(Key.PRIORITY)
     set(value) = set(Key.PRIORITY, value)
 
@@ -35,6 +35,6 @@ var <E : Event> EventConfigurationScope<E>.priority: Priority
  *
  * @see Key.DISALLOW_SUBTYPES
  */
-var <E : Event> EventConfigurationScope<E>.disallowSubtypes: Boolean
+var EventConfigurationScope<*>.disallowSubtypes: Boolean
     get() = getOrDefault(Key.DISALLOW_SUBTYPES)
     set(value) = set(Key.DISALLOW_SUBTYPES, value)
