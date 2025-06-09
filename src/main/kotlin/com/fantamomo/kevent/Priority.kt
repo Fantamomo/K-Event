@@ -49,5 +49,12 @@ sealed interface Priority : Comparable<Priority> {
 
     companion object {
         operator fun invoke(priority: Int): Priority = Standard.fromPriority(priority) ?: Custom(priority)
+
+        val HIGHEST = Standard.HIGHEST
+        val HIGH = Standard.HIGH
+        val NORMAL = Standard.NORMAL
+        val LOW = Standard.LOW
+        val LOWEST = Standard.LOWEST
+        val MONITOR = Standard.MONITOR
     }
 }
