@@ -57,6 +57,14 @@ class EventConfigurationScope<E : Event> {
     }
 
     /**
+     * Checks whether the specified key is present in the configuration scope.
+     *
+     * @param key The key to check for presence in the configuration.
+     * @return `true` if the key is present, `false` otherwise.
+     */
+    operator fun contains(key: Key<*>) = data.containsKey(key)
+
+    /**
      * Removes a configuration option with the specified key.
      * 
      * @param key The key to remove
