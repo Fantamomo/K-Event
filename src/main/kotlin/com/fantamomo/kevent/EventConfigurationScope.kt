@@ -1,6 +1,6 @@
 package com.fantamomo.kevent
 
-class EventConfigurationScope {
+class EventConfigurationScope<E : Event> {
     internal val data: MutableMap<Key<*>, Any?> = mutableMapOf()
 
     @Suppress("UNCHECKED_CAST")
