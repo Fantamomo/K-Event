@@ -117,7 +117,7 @@ fun emptyConfiguration(event: Event?) {
  * @since 1.0-SNAPSHOT
  */
 @OptIn(ExperimentalContracts::class)
-inline fun <E : Event> createConfigurationScope(block: EventConfigurationScope<E>.() -> Unit): EventConfiguration<E> {
+inline fun <E : Event> createConfigurationScope(block: @EventDsl EventConfigurationScope<E>.() -> Unit): EventConfiguration<E> {
     contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
     val scope = EventConfigurationScope<E>()
     scope.block()
