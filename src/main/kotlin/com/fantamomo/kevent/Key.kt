@@ -57,6 +57,7 @@ data class Key<T>(val key: String, val type: KClass<T & Any>, val defaultValue: 
          * @see priority
          */
         val PRIORITY = Key<Priority>("priority", Priority.Standard.NORMAL)
+
         /**
          * Build-in key for defining if the listener disallow all subtypes of an event.
          *
@@ -76,7 +77,7 @@ data class Key<T>(val key: String, val type: KClass<T & Any>, val defaultValue: 
          * event is fired, the listener will NEVER be called for that new event,
          * not even later. The event is effectively ignored for that busy listener.**
          *
-         * @see
+         * @see exclusiveListenerProcessing
          */
         val EXCLUSIVE_LISTENER_PROCESSING = Key<Boolean>("exclusiveListenerProcessing", false)
 
@@ -87,6 +88,8 @@ data class Key<T>(val key: String, val type: KClass<T & Any>, val defaultValue: 
          * and it does not currently have an active role in the main functionality.
          * It may potentially be used by other systems in the future for further expansion
          * or feature integration.
+         *
+         * @see name
          */
         val NAME = Key<String>("name", "")
 
