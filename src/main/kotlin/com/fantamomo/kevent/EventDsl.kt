@@ -20,5 +20,7 @@ package com.fantamomo.kevent
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
+@Target(AnnotationTarget.VALUE_PARAMETER, AnnotationTarget.TYPE, AnnotationTarget.FUNCTION, AnnotationTarget.CLASS)
+@Retention(AnnotationRetention.BINARY)
 @DslMarker
 annotation class EventDsl
