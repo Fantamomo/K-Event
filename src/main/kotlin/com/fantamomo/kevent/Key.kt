@@ -91,7 +91,7 @@ data class Key<T>(val key: String, val type: KClass<T & Any>, val defaultValue: 
          *
          * @see name
          */
-        val NAME = Key<String>("name", "")
+        val NAME = Key<String?>("name", null)
 
         /**
          * Convenience factory method for creating keys with reified types.
