@@ -61,3 +61,18 @@ var EventConfigurationScope<*>.disallowSubtypes: Boolean
 var EventConfigurationScope<*>.exclusiveListenerProcessing: Boolean
     get() = getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)
     set(value) = set(Key.EXCLUSIVE_LISTENER_PROCESSING, value)
+
+/**
+ * Use to set the name of a Listener.
+ *
+ * It may potentially be used by other systems in the future for further expansion
+ * or feature integration.
+ *
+ * @author Fantamomo
+ * @since 1.0-SNAPSHOT
+ *
+ * @see Key.NAME
+ */
+var EventConfigurationScope<*>.name: String
+    get() = getOrDefault(Key.NAME)
+    set(value) = set(Key.NAME, value)
