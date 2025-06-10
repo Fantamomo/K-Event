@@ -67,6 +67,20 @@ data class Key<T>(val key: String, val type: KClass<T & Any>, val defaultValue: 
         val DISALLOW_SUBTYPES = Key<Boolean>("disallowSubtypes", false)
 
         /**
+         * Built-in key for defining if a listener should process events exclusively.
+         *
+         * If set to `true`, a listener will not be invoked for a new event if it
+         * is already actively handling another event. This ensures that a single
+         * listener instance processes events one by one, preventing overlapping execution.
+         * **Crucially, if a listener is currently processing an event and another
+         * event is fired, the listener will NEVER be called for that new event,
+         * not even later. The event is effectively ignored for that busy listener.**
+         *
+         * @see
+         */
+        val EXCLUSIVE_LISTENER_PROCESSING = Key<Boolean>("exclusiveListenerProcessing", false)
+
+        /**
          * Convenience factory method for creating keys with reified types.
          *
          * This method simplifies the creation of keys by inferring the type from
