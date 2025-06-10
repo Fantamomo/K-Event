@@ -53,9 +53,7 @@ fun <E : Event> configuration(event: E?, @EventDsl block: EventConfigurationScop
         callsInPlace(block, InvocationKind.AT_MOST_ONCE)
     }
     if (event == null) {
-        val scope = EventConfigurationScope<E>()
-        scope.block()
-        throw ConfigurationCapturedException(EventConfiguration(scope))
+        throw ConfigurationCapturedException(createConfigurationScope(block))
     }
 }
 
@@ -98,4 +96,28 @@ fun <E : Event> configuration(event: E?, @EventDsl block: EventConfigurationScop
 fun emptyConfiguration(event: Event?) {
     contract { returns() implies (event != null) }
     if (event == null) throw ConfigurationCapturedException(EventConfiguration.DEFAULT)
+}
+
+/**
+ * Creates a configuration scope for an event and applies the given configuration block.
+ *
+ * This function initializes an [EventConfigurationScope], executes the provided
+ * configuration [block] within that scope, and then returns an [EventConfiguration]
+ * containing the configured data.
+ *
+ * @param block A lambda that defines the configuration for the event. The block
+ *              is executed with the newly created [EventConfigurationScope] as the receiver.
+ * @return An [EventConfiguration] containing the configuration data set within the scope.
+ *
+ * @see configuration
+ *
+ * @author Fantamomo
+ * @since 1.0-SNAPSHOT
+ */
+@OptIn(ExperimentalContracts::class)
+fun <E : Event> createConfigurationScope(block: EventConfigurationScope<E>.() -> Unit): EventConfiguration<E> {
+    contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+    val scope = EventConfigurationScope<E>()
+    scope.block()
+    return EventConfiguration(scope)
 }
