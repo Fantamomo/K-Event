@@ -46,8 +46,9 @@ import kotlin.contracts.contract
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
+@Throws(ConfigurationCapturedException::class)
 @OptIn(ExperimentalContracts::class)
-fun <E : Event> configuration(event: E?, @EventDsl block: EventConfigurationScope<E>.() -> Unit) {
+inline fun <E : Event> configuration(event: E?, @EventDsl block: EventConfigurationScope<E>.() -> Unit) {
     contract {
         returns() implies (event != null)
         callsInPlace(block, InvocationKind.AT_MOST_ONCE)
@@ -92,6 +93,7 @@ fun <E : Event> configuration(event: E?, @EventDsl block: EventConfigurationScop
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
+@Throws(ConfigurationCapturedException::class)
 @OptIn(ExperimentalContracts::class)
 fun emptyConfiguration(event: Event?) {
     contract { returns() implies (event != null) }
@@ -115,7 +117,7 @@ fun emptyConfiguration(event: Event?) {
  * @since 1.0-SNAPSHOT
  */
 @OptIn(ExperimentalContracts::class)
-fun <E : Event> createConfigurationScope(block: EventConfigurationScope<E>.() -> Unit): EventConfiguration<E> {
+inline fun <E : Event> createConfigurationScope(block: EventConfigurationScope<E>.() -> Unit): EventConfiguration<E> {
     contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
     val scope = EventConfigurationScope<E>()
     scope.block()
