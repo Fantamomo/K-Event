@@ -30,11 +30,34 @@ var EventConfigurationScope<*>.priority: Priority
  * @receiver The [EventConfigurationScope] that this property belongs to.
  * @property disallowSubtypes Determines whether subtypes of the event are disallowed.
  *
+ * @author Fantamomo
+ * @since 1.0-SNAPSHOT
+ *
  * @see Priority
- * @see Key.PRIORITY
  *
  * @see Key.DISALLOW_SUBTYPES
  */
 var EventConfigurationScope<*>.disallowSubtypes: Boolean
     get() = getOrDefault(Key.DISALLOW_SUBTYPES)
     set(value) = set(Key.DISALLOW_SUBTYPES, value)
+
+/**
+ * Specifies whether a listener should process events exclusively.
+ *
+ * When this property is set to `true`, the associated listener will not process
+ * a new event if it is still actively handling a previous one. This ensures that
+ * the listener processes events sequentially, preventing overlapping or concurrent
+ * execution. If a new event occurs while the listener is busy, that event will be
+ * ignored for the duration of the listener's processing, and it will not be
+ * processed later once the listener becomes available.
+ *
+ * This option is useful for listeners that may call this Event, due API or other.
+ *
+ * @author Fantamomo
+ * @since 1.0-SNAPSHOT
+ *
+ * @see Key.EXCLUSIVE_LISTENER_PROCESSING
+ */
+var EventConfigurationScope<*>.exclusiveListenerProcessing: Boolean
+    get() = getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)
+    set(value) = set(Key.EXCLUSIVE_LISTENER_PROCESSING, value)
