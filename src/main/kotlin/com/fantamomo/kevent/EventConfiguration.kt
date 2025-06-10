@@ -78,5 +78,14 @@ class EventConfiguration<E : Event>(private val data: Map<Key<*>, Any?>) {
          * without requiring a configuration block.
          */
         val DEFAULT = EventConfiguration<Nothing>(emptyMap())
+
+        /**
+         * Returns a default [EventConfiguration] instance for the specified event type [E].
+         *
+         * @param E The event type for which the default configuration is returned.
+         * @return The default [EventConfiguration] instance for the specified event type [E].
+         */
+        @Suppress("UNCHECKED_CAST")
+        fun <E : Event> default() = DEFAULT as EventConfiguration<E>
     }
 }
