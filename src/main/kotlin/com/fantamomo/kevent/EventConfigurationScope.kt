@@ -31,6 +31,7 @@ package com.fantamomo.kevent
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
+@EventDsl
 class EventConfigurationScope<E : Event> {
     /**
      * Internal storage for configuration data.
