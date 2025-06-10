@@ -1,5 +1,3 @@
-// docs
-
 package com.fantamomo.kevent
 
 import kotlin.reflect.KClass
