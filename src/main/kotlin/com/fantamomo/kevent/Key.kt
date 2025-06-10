@@ -81,6 +81,16 @@ data class Key<T>(val key: String, val type: KClass<T & Any>, val defaultValue: 
         val EXCLUSIVE_LISTENER_PROCESSING = Key<Boolean>("exclusiveListenerProcessing", false)
 
         /**
+         * Represents a debug-only key with a name identifier.
+         *
+         * This key's primary purpose is to serve debugging operations within the system,
+         * and it does not currently have an active role in the main functionality.
+         * It may potentially be used by other systems in the future for further expansion
+         * or feature integration.
+         */
+        val NAME = Key<String>("name", "")
+
+        /**
          * Convenience factory method for creating keys with reified types.
          *
          * This method simplifies the creation of keys by inferring the type from
