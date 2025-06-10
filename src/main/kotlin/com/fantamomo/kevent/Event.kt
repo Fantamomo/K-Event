@@ -36,4 +36,20 @@ open class Event {
      * @throws IllegalArgumentException if the event class does not have a name
      */
     val name: String = this::class.simpleName ?: throw IllegalArgumentException("Event class must have a name")
+
+    /**
+     * Interface to be implemented by `companion object`s of subclasses inheriting from [Event].
+     *
+     * The primary purpose of this interface is to enable developers to define `companion object`s
+     * that can be extended with utility functions through extension methods. These extensions
+     * allow for easier registration and interaction with the events within the event system.
+     *
+     * It is recommended that all `companion object`s of event subclasses implement this interface,
+     * as it provides a structured and type-safe way to handle event-specific operations.
+     *
+     * @param E The type of event associated with this listener.
+     */
+    interface Listening<E : Event>
+
+    companion object : Listening<Event>
 }
