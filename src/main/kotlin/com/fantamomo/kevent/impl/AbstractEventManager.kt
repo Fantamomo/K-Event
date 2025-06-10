@@ -79,7 +79,7 @@ abstract class AbstractEventManager : EventManager {
     }
 
     protected open fun <E : Event> buildRegisteredListener(
-        listener: Listener,
+        listener: Listener?,
         eventClass: KClass<E>,
         configuration: EventConfiguration<E>,
         handler: (E) -> Unit
@@ -93,7 +93,6 @@ abstract class AbstractEventManager : EventManager {
     protected open fun onUnexpectedException(listener: Listener, method: KFunction<*>, e: Throwable) {}
 
     protected open fun <E : Event> onHandlerException(
-        listener: Listener,
         registeredListener: RegisteredListener<E>,
         event: E,
         e: Throwable
@@ -111,16 +110,20 @@ abstract class AbstractEventManager : EventManager {
                     listener.handler(event)
                 } catch (e: InvocationTargetException) {
                     val cause = e.cause ?: continue
-                    onHandlerException(listener.listener, listener, event, cause)
+                    onHandlerException(listener, event, cause)
                 } catch (e: Exception) {
-                    onHandlerException(listener.listener, listener, event, e)
+                    onHandlerException(listener, event, e)
                 }
             }
         }
     }
 
+    override fun <E : Event> register(event: KClass<E>, configuration: EventConfiguration<E>, handler: (E) -> Unit) {
+        listenerMap.computeIfAbsent(event) { mutableListOf() }.add(buildRegisteredListener(null, event, configuration, handler))
+    }
+
     protected open class RegisteredListener<E : Event>(
-        val listener: Listener,
+        val listener: Listener?,
         val eventClass: KClass<E>,
         val configuration: EventConfiguration<E>,
         val handler: (E) -> Unit
