@@ -109,8 +109,10 @@ abstract class AbstractEventManager : EventManager {
                 if (listener.disallowSubtypes && eventClass != listener.eventClass) continue
                 if (listener.exclusiveListenerProcessing && listener.currentCalled) continue
                 listener.currentCalled = true
+                listener.callCount++
                 try {
                     listener.handler(event)
+                    listener.successfulCallCount++
                 } catch (e: InvocationTargetException) {
                     val cause = e.cause ?: continue
                     onHandlerException(listener, event, cause)
@@ -136,5 +138,7 @@ abstract class AbstractEventManager : EventManager {
         val disallowSubtypes = configuration.getOrDefault(Key.DISALLOW_SUBTYPES)
         val exclusiveListenerProcessing = configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)
         var currentCalled = false
+        var callCount: Int = 0
+        var successfulCallCount: Int = 0
     }
 }
