@@ -106,6 +106,7 @@ abstract class AbstractEventManager : EventManager {
             for (listener in listeners) {
                 @Suppress("UNCHECKED_CAST")
                 listener as RegisteredListener<Event>
+                if (listener.disallowSubtypes && eventClass != listener.eventClass) continue
                 try {
                     listener.handler(event)
                 } catch (e: InvocationTargetException) {
@@ -127,5 +128,7 @@ abstract class AbstractEventManager : EventManager {
         val eventClass: KClass<E>,
         val configuration: EventConfiguration<E>,
         val handler: (E) -> Unit
-    )
+    ) {
+        val disallowSubtypes = configuration.getOrDefault(Key.DISALLOW_SUBTYPES)
+    }
 }
