@@ -1,5 +1,7 @@
 package com.fantamomo.kevent
 
+import kotlin.reflect.KClass
+
 /**
  * Base class for all events in the event system.
  * 
@@ -40,16 +42,40 @@ open class Event {
     /**
      * Interface to be implemented by `companion object`s of subclasses inheriting from [Event].
      *
-     * The primary purpose of this interface is to enable developers to define `companion object`s
-     * that can be extended with utility functions through extension methods. These extensions
-     * allow for easier registration and interaction with the events within the event system.
+     * This interface is intended to mark companion objects as registrable entry points
+     * for event-related extension functions. By implementing this interface, the companion
+     * object can be used in a type-safe way to register listeners or interact with the event
+     * system through extensions.
      *
-     * It is recommended that all `companion object`s of event subclasses implement this interface,
-     * as it provides a structured and type-safe way to handle event-specific operations.
+     * It is recommended that all `companion object`s of event subclasses implement this interface
+     * to enable convenient and consistent registration of event handlers via extensions.
      *
-     * @param E The type of event associated with this listener.
+     * Example:
+     * ```
+     * class MyEvent(val data: String) : Event() {
+     *     companion object : Registrable<MyEvent> {
+     *         override val eventType = MyEvent::class
+     *     }
+     * }
+     *
+     * fun <E : Event> Registrable<E>.register(handler: (E) -> Unit) {
+     *     // Register the handler for this event type
+     * }
+     *
+     * // Usage:
+     * MyEvent.register { println(it.data) }
+     * ```
+     *
+     * @param E The type of event associated with this companion object
      */
-    interface Listening<E : Event>
+    interface Registrable<E : Event> {
+        /**
+         * Represents the type of event associated with this registrable companion object.
+         */
+        val eventType: KClass<E>
+    }
 
-    companion object : Listening<Event>
+    companion object : Registrable<Event> {
+        override val eventType: KClass<Event> = Event::class
+    }
 }
