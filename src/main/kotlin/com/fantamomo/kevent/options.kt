@@ -73,6 +73,6 @@ var EventConfigurationScope<*>.exclusiveListenerProcessing: Boolean
  *
  * @see Key.NAME
  */
-var EventConfigurationScope<*>.name: String
-    get() = getOrDefault(Key.NAME)
+var EventConfigurationScope<*>.name: String?
+    get() = get(Key.NAME)
     set(value) = set(Key.NAME, value)
