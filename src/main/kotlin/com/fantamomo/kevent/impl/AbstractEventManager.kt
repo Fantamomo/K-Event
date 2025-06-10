@@ -114,7 +114,10 @@ abstract class AbstractEventManager : EventManager {
                     listener.handler(event)
                     listener.successfulCallCount++
                 } catch (e: InvocationTargetException) {
-                    val cause = e.cause ?: continue
+                    val cause = if (e.cause != null) e.cause!! else {
+                        onHandlerException(listener, event, e)
+                        continue
+                    }
                     onHandlerException(listener, event, cause)
                 } catch (e: Exception) {
                     onHandlerException(listener, event, e)
