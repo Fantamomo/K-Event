@@ -74,6 +74,10 @@ manager.dispatch(GameStartedEvent("game-42"))
 
 Listeners with matching event types are called, ordered by priority.
 
+> The `DefaultEventManager` is located in a separate module to keep the `api` module clean.
+> This separation ensures the `api` module remains free of any implementation details that could conflict with custom
+> event systems.
+
 ---
 
 ## ⚙️ Configuration
