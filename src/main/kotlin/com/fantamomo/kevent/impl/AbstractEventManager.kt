@@ -107,8 +107,8 @@ abstract class AbstractEventManager : EventManager {
                 @Suppress("UNCHECKED_CAST")
                 listener as RegisteredListener<Event>
                 if (listener.disallowSubtypes && eventClass != listener.eventClass) continue
-                if (listener.exclusiveListenerProcessing && listener.currentCalled) continue
-                listener.currentCalled = true
+                if (listener.exclusiveListenerProcessing && listener.isCurrentlyCalled) continue
+                listener.isCurrentlyCalled = true
                 listener.callCount++
                 try {
                     listener.handler(event)
@@ -122,7 +122,7 @@ abstract class AbstractEventManager : EventManager {
                 } catch (e: Exception) {
                     onHandlerException(listener, event, e)
                 } finally {
-                    listener.currentCalled = false
+                    listener.isCurrentlyCalled = false
                 }
             }
         }
@@ -140,7 +140,7 @@ abstract class AbstractEventManager : EventManager {
     ) {
         val disallowSubtypes = configuration.getOrDefault(Key.DISALLOW_SUBTYPES)
         val exclusiveListenerProcessing = configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)
-        var currentCalled = false
+        var isCurrentlyCalled = false
         var callCount: Int = 0
         var successfulCallCount: Int = 0
     }
