@@ -1,5 +1,6 @@
 package com.fantamomo.kevent.manager
 
+import com.fantamomo.kevent.*
 import kotlin.reflect.KClass
 
 /**
