@@ -1,9 +1,8 @@
-package com.fantamomo.kevent.impl
+package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.ConfigurationCapturedException
 import com.fantamomo.kevent.Event
 import com.fantamomo.kevent.EventConfiguration
-import com.fantamomo.kevent.EventManager
 import com.fantamomo.kevent.Key
 import com.fantamomo.kevent.Listener
 import com.fantamomo.kevent.Register

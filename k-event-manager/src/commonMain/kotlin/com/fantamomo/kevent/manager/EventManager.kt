@@ -1,4 +1,4 @@
-package com.fantamomo.kevent
+package com.fantamomo.kevent.manager
 
 import kotlin.reflect.KClass
 
