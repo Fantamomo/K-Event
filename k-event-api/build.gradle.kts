@@ -5,6 +5,8 @@ plugins {
 
 kotlin {
 
+    jvm() // dummy
+
     sourceSets {
         val commonMain by getting {
             dependencies {
