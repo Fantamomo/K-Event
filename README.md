@@ -1,8 +1,6 @@
 # KEvent – A Type-Safe and Flexible Event System for Kotlin
 
-**KEvent** is a lightweight, type-safe event system built for Kotlin. It’s designed to help you decouple parts of your application using clean, simple observer-style logic – with zero compromises on type safety or flexibility.
-
-Whether you're building a game, a plugin framework, or just want to avoid a tangled mess of callbacks, KEvent has your back.
+**KEvent** is a lightweight and powerful event system designed specifically for Kotlin. It provides a clean and type-safe way to decouple parts of your application, using observer-style logic. Perfect for games, plugin frameworks, or any app that needs structured event handling.
 
 ---
 
@@ -44,7 +42,7 @@ fun main() {
 
 ### 🔹 Define Events
 
-All events inherit from a base `Event` class.
+All events extend the `Event` base class:
 
 ```kotlin
 class GameStartedEvent(val gameId: String) : Event()
@@ -52,8 +50,7 @@ class GameStartedEvent(val gameId: String) : Event()
 
 ### 🔹 Create Listeners
 
-Listeners are just classes that are implementing `Listener` that have methods marked `@Register`. Each method takes exactly one nullable `Event` parameter.
-Why nullable? Because KEvent calls it once with `null` during registration to collect configuration.
+Listeners implement the `Listener` interface and define methods annotated with `@Register`. Each method takes one nullable event parameter:
 
 ```kotlin
 @Register
@@ -61,70 +58,56 @@ fun onStart(event: GameStartedEvent?) {
     configuration(event) {
         priority = Priority.LOW
     }
-    
-    // ...
+    // event is non-null here
 }
 ```
 
-Inside the body, the event is guaranteed to be non-null (thanks to Kotlin contracts).
+Why nullable? Because KEvent calls the method once with `null` to collect configuration before actual events are dispatched.
 
 ### 🔹 Dispatch Events
 
-Just call:
+To trigger an event, just call:
 
 ```kotlin
 manager.dispatch(GameStartedEvent("game-42"))
 ```
 
-All matching listeners are called, in order of their priority.
+Listeners with matching event types are called, ordered by priority.
 
 ---
 
 ## ⚙️ Configuration
 
-KEvent lets you configure each handler using a little DSL during registration (when the method is called with `null`).
+KEvent provides a DSL to configure how each handler behaves:
 
 ```kotlin
 configuration(event) {
-    // Control execution order (HIGHEST, HIGH, NORMAL, LOW, LOWEST, MONITOR)
     priority = Priority.HIGH
-
-    // Or use a custom priority value for fine-grained control
-    priority = Priority.Custom(750) // Between HIGH (500) and HIGHEST (1000)
-
-    // Ignore subtypes of this event
+    priority = Priority.Custom(750) // For fine-tuned order
     disallowSubtypes = true
-
-    // When set to true, this listener will not be called
-    // when it is already handling a event
-    // (e.g. to avoid StackOverflow)
     exclusiveListenerProcessing = true
-
-    // Only for debug reason
-    name = "My Listener"
-    
+    name = "JoinListener"
     set(MyKeys.ASYNC, true)
 }
 ```
 
-> You always have to call `configuration`, if you don’t have to specify settings you can call `emptyConfiguration(event)`.
+> If you don’t need custom config, use `emptyConfiguration(event)` instead.
 
-### Built-in options**:**
+### Built-in options:
 
-* `priority`: Controls call order (`HIGHEST`, `HIGH`, `NORMAL`, etc.)
-* `disallowSubtypes`: If true, the handler only fires for the exact class
-* `exclusiveListenerProcessing`: If true the listener will only be called for one Event at a time
-* `name`: Only for debug reasons
-* `set(...)`: Add your own custom behavior via keys
+* `priority`: Order in which listeners are executed
+* `disallowSubtypes`: Restrict to exact event class
+* `exclusiveListenerProcessing`: Avoid recursive or concurrent handling
+* `name`: Helpful for debugging
+* `set(...)`: Attach custom behavior with keys
 
 ---
 
 ## 🧩 Custom Keys
 
-You can define your own config keys to extend KEvent however you want.
+You can extend KEvent with your own keys and behaviors:
 
 ```kotlin
-// In your library
 object MyKeys {
     val ASYNC = Key("async", false)
 }
@@ -134,7 +117,7 @@ var EventConfigurationScope<*>.async: Boolean
     set(value) = set(MyKeys.ASYNC, value)
 ```
 
-Use it in config:
+Use in configuration:
 
 ```kotlin
 configuration(event) {
@@ -142,39 +125,38 @@ configuration(event) {
 }
 ```
 
-Now your system can look for that flag and run the handler on another thread, etc.
+You can now interpret that flag however you need (e.g., offload to another thread).
 
 ---
 
 ## 🛠 Under the Hood
 
-Here’s what happens when you register a listener:
+**Registration Process:**
 
-1. All methods with `@Register` are found via reflection.
+1. `@Register` methods are found via reflection.
 2. Each is called once with `null`.
-3. A special exception is thrown from your method carrying the config.
-4. That config is stored and used when real events are dispatched.
+3. The method throws a special exception to return the config.
+4. Configuration is stored.
 
-When dispatching:
+**Dispatching Process:**
 
-1. All handlers for the event type are collected.
-2. They're sorted by priority.
-3. Each is called with the actual event instance.
+1. All handlers for the event are found.
+2. Sorted by their priority.
+3. Called with the real event instance.
 
-It's safe, efficient, and lets you write clear event-driven code without magic or mess.
-
----
-
-## Why KEvent?
-
-* Type-safe from end to end
-* Simple, expressive DSL
-* Flexible and extendable
-* Works great with games, plugins, or tools
-* No global state, no singletons
+This system is safe, predictable, and has no hidden magic.
 
 ---
 
-Developed by **Fantamomo**
+## ❓ Why Use KEvent?
 
+* Full Kotlin type safety
+* Simple and readable DSL
+* Easily extendable
+* Designed for performance and clarity
+* Zero global state
+
+---
+
+Built by **Fantamomo**
 Version **1.0-SNAPSHOT**
