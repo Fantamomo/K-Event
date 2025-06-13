@@ -48,6 +48,7 @@ import kotlin.contracts.contract
  */
 @Throws(ConfigurationCapturedException::class)
 @OptIn(ExperimentalContracts::class)
+@JvmSynthetic
 inline fun <E : Event> configuration(event: E?, @EventDsl block: EventConfigurationScope<E>.() -> Unit) {
     contract {
         returns() implies (event != null)
@@ -95,6 +96,7 @@ inline fun <E : Event> configuration(event: E?, @EventDsl block: EventConfigurat
  */
 @Throws(ConfigurationCapturedException::class)
 @OptIn(ExperimentalContracts::class)
+@JvmSynthetic
 fun emptyConfiguration(event: Event?) {
     contract { returns() implies (event != null) }
     if (event == null) throw ConfigurationCapturedException(EventConfiguration.DEFAULT)
@@ -117,6 +119,7 @@ fun emptyConfiguration(event: Event?) {
  * @since 1.0-SNAPSHOT
  */
 @OptIn(ExperimentalContracts::class)
+@JvmSynthetic
 inline fun <E : Event> createConfigurationScope(block: @EventDsl EventConfigurationScope<E>.() -> Unit): EventConfiguration<E> {
     contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
     val scope = EventConfigurationScope<E>()
