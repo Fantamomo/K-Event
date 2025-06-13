@@ -26,4 +26,4 @@ package com.fantamomo.kevent
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
-class ConfigurationCapturedException(val configuration: EventConfiguration<*>) : RuntimeException()
+class ConfigurationCapturedException(val configuration: EventConfiguration<*>) : Throwable(null, null, false, false)
