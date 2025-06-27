@@ -9,10 +9,6 @@ version = "1.0-SNAPSHOT"
 kotlin {
 
     jvm() // dummy
-    js(IR) {
-        browser()
-        nodejs()
-    }
 
     sourceSets {
         val commonMain by getting {
