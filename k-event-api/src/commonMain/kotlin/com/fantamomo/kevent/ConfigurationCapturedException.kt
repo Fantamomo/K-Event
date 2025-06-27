@@ -26,4 +26,7 @@ package com.fantamomo.kevent
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
-class ConfigurationCapturedException(val configuration: EventConfiguration<*>) : Throwable(null, null, false, false)
+@Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
+expect class ConfigurationCapturedException(configuration: EventConfiguration<*>) : Throwable {
+    val configuration: EventConfiguration<*>
+}
