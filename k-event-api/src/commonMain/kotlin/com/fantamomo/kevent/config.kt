@@ -3,6 +3,7 @@ package com.fantamomo.kevent
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
+import kotlin.jvm.JvmSynthetic
 
 /**
  * Configures an event handler with custom options.
