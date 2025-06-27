@@ -1,7 +1,5 @@
 package com.fantamomo.kevent
 
-import java.util.Collections
-
 /**
  * Represents the priority of an event handler.
  * 
@@ -103,7 +101,7 @@ sealed interface Priority : Comparable<Priority> {
         object MONITOR : Standard(Int.MIN_VALUE)
 
         companion object {
-            private val entries by lazy { Collections.unmodifiableList(listOf(HIGHEST, HIGH, NORMAL, LOW, LOWEST)) }
+            private val entries by lazy { listOf(HIGHEST, HIGH, NORMAL, LOW, LOWEST) }
             private val BY_PRIORITY by lazy { entries.associateBy(Standard::priority) }
 
             /**
