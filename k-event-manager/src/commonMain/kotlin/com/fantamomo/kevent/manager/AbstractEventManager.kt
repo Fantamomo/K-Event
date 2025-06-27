@@ -7,9 +7,12 @@ import com.fantamomo.kevent.Key
 import com.fantamomo.kevent.Listener
 import com.fantamomo.kevent.Register
 import java.lang.reflect.InvocationTargetException
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.sortByDescending
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 import kotlin.reflect.KClass
 import kotlin.reflect.KClassifier
 import kotlin.reflect.KFunction
@@ -22,6 +25,7 @@ import kotlin.reflect.jvm.isAccessible
 abstract class AbstractEventManager : EventManager {
 
     protected val listenerMap = mutableMapOf<KClass<out Event>, MutableList<RegisteredListener<out Event>>>()
+    protected val look = ReentrantReadWriteLock()
 
     @Suppress("UNCHECKED_CAST")
     override fun register(listener: Listener) {
@@ -71,7 +75,9 @@ abstract class AbstractEventManager : EventManager {
             val handler: (Event) -> Unit = { event -> method.call(listener, event) }
 
             val registeredListener = buildRegisteredListener(listener, eventClass, config, handler)
-            val list = listenerMap.computeIfAbsent(eventClass) { mutableListOf() }
+            val list = look.write {
+                listenerMap.computeIfAbsent(eventClass) { mutableListOf() }
+            }
             list.add(registeredListener)
             list.sortByDescending { it.configuration.getOrDefault(Key.PRIORITY) }
         }
@@ -99,7 +105,7 @@ abstract class AbstractEventManager : EventManager {
 
     override fun dispatch(event: Event) {
         val eventClass = event::class
-        for ((registeredClass, listeners) in listenerMap) {
+        for ((registeredClass, listeners) in look.read { listenerMap.iterator() }) {
             if (!eventClass.isSubclassOf(registeredClass)) continue
 
             for (listener in listeners) {
@@ -128,7 +134,8 @@ abstract class AbstractEventManager : EventManager {
     }
 
     override fun <E : Event> register(event: KClass<E>, configuration: EventConfiguration<E>, handler: (E) -> Unit) {
-        listenerMap.computeIfAbsent(event) { mutableListOf() }.add(buildRegisteredListener(null, event, configuration, handler))
+        val listeners = look.write { listenerMap.computeIfAbsent(event) { mutableListOf() } }
+        listeners.add(buildRegisteredListener(null, event, configuration, handler))
     }
 
     protected open class RegisteredListener<E : Event>(
