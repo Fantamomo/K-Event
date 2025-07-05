@@ -2,6 +2,7 @@ package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.*
 import com.fantamomo.kevent.manager.components.*
+import com.fantamomo.kevent.utils.InjectionName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -15,6 +16,7 @@ import kotlin.reflect.KFunction
 import kotlin.reflect.KParameter
 import kotlin.reflect.KVisibility
 import kotlin.reflect.full.declaredMemberFunctions
+import kotlin.reflect.full.findAnnotation
 import kotlin.reflect.full.hasAnnotation
 import kotlin.reflect.full.isSuperclassOf
 import kotlin.reflect.jvm.isAccessible
@@ -57,7 +59,8 @@ class DefaultEventManager internal constructor(
 
             val parameters = method.parameters
             val resolvers = parameters.dropWhile { it.index < 2 }.associateWith { parameter ->
-                parameterResolver.find { it.name == parameter.name && it.type == parameter.type.classifier }
+                parameterResolver.find {
+                    (parameter.findAnnotation<InjectionName>()?.value ?: it.name) == parameter.name && it.type == parameter.type.classifier }
                     ?: continue@out
             }
             if (parameters.size < 2) continue
