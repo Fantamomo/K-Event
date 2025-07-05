@@ -23,5 +23,8 @@ kotlin {
                 implementation("org.jetbrains.kotlin:kotlin-test")
             }
         }
+        all {
+            languageSettings.enableLanguageFeature("BreakContinueInInlineLambdas")
+        }
     }
 }

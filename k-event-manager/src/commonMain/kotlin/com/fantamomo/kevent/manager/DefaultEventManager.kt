@@ -1,17 +1,22 @@
 package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.*
-import com.fantamomo.kevent.manager.components.EventManagerComponent
-import com.fantamomo.kevent.manager.components.ExceptionHandler
-import com.fantamomo.kevent.manager.components.getOrThrow
+import com.fantamomo.kevent.manager.components.*
+import com.fantamomo.kevent.utils.InjectionName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.job
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
+import kotlin.reflect.KParameter
 import kotlin.reflect.KVisibility
 import kotlin.reflect.full.declaredMemberFunctions
+import kotlin.reflect.full.findAnnotation
 import kotlin.reflect.full.hasAnnotation
 import kotlin.reflect.full.isSuperclassOf
 import kotlin.reflect.jvm.isAccessible
@@ -19,6 +24,7 @@ import kotlin.reflect.jvm.jvmName
 
 class DefaultEventManager internal constructor(
     components: EventManagerComponent<*>,
+    defaultParameterInjection: Boolean,
 ) : EventManager {
 
     private val handlers: ConcurrentHashMap<KClass<out Dispatchable>, HandlerList<out Dispatchable>> =
@@ -26,14 +32,38 @@ class DefaultEventManager internal constructor(
 
     private val exceptionHandler = components.getOrThrow(ExceptionHandler)
 
+    private val parameterResolver: List<ListenerParameterResolver<*>>
+
+    private val scope: CoroutineScope =
+        components[EventCoroutineScope]?.scope ?: CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+    init {
+        var components = components
+        if (defaultParameterInjection) {
+            components += ListenerParameterResolver.static("manager", EventManager::class, this) +
+                    ListenerParameterResolver.static("logger", Logger::class, logger) +
+                    ListenerParameterResolver.static(
+                        "scope",
+                        CoroutineScope::class,
+                        CoroutineScope(Dispatchers.Default + SupervisorJob(scope.coroutineContext.job))
+                    )
+        }
+        parameterResolver = components.getAll(ListenerParameterResolver.Key)
+    }
+
     override fun register(listener: Listener) {
         val listenerClass = listener::class
-        for (method in listenerClass.declaredMemberFunctions) {
+        out@ for (method in listenerClass.declaredMemberFunctions) {
             if (!method.hasAnnotation<Register>()) continue
             if (method.visibility != KVisibility.PUBLIC) continue
 
             val parameters = method.parameters
-            if (parameters.size != 2) continue
+            val resolvers = parameters.dropWhile { it.index < 2 }.associateWith { parameter ->
+                parameterResolver.find {
+                    it.name == (parameter.findAnnotation<InjectionName>()?.value ?: parameter.name) && it.type == parameter.type.classifier }
+                    ?: continue@out
+            }
+            if (parameters.size < 2) continue
 
             val eventClass = parameters[1].type.classifier as? KClass<*> ?: continue
             if (!Dispatchable::class.isSuperclassOf(eventClass)) continue
@@ -41,9 +71,13 @@ class DefaultEventManager internal constructor(
             @Suppress("UNCHECKED_CAST")
             val typedEventClass = eventClass as KClass<Dispatchable>
 
+            val arguments = mapOf(
+                parameters[0] to listener,
+                parameters[1] to null
+            ) + resolvers.mapValues { it.value.valueByConfiguration }
             try {
                 method.isAccessible = true
-                method.call(listener, null)
+                method.callBy(arguments)
             } catch (e: InvocationTargetException) {
                 val config = (e.targetException as? ConfigurationCapturedException)?.configuration
                 if (config !is EventConfiguration<*>) continue
@@ -53,7 +87,8 @@ class DefaultEventManager internal constructor(
                     type = typedEventClass,
                     listener = listener,
                     kFunction = method,
-                    configuration = config as EventConfiguration<Dispatchable>
+                    configuration = config as EventConfiguration<Dispatchable>,
+                    resolvers = resolvers
                 )
 
                 getOrCreateHandlerList(typedEventClass).add(handler)
@@ -122,8 +157,10 @@ class DefaultEventManager internal constructor(
 
     private inner class HandlerList<E : Dispatchable> {
         private val listeners: MutableList<RegisteredListener<E>> = mutableListOf()
+
         @Volatile
         private var sortedListeners: List<RegisteredListener<E>> = emptyList()
+
         @Volatile
         private var dirty: Boolean = true
 
@@ -197,8 +234,20 @@ class DefaultEventManager internal constructor(
         override val listener: Listener,
         val kFunction: KFunction<*>,
         configuration: EventConfiguration<E>,
+        val resolvers: Map<KParameter, ListenerParameterResolver<*>>,
     ) : RegisteredListener<E>(type, listener, configuration) {
-        override val method: (E) -> Unit = { evt -> kFunction.call(listener, evt) }
+        private val thisParameter = kFunction.parameters[0]
+        private val eventParameter = kFunction.parameters[1]
+        override val method: (E) -> Unit = { evt ->
+            val args = mapOf(thisParameter to listener, eventParameter to evt) + resolvers.mapValues {
+                it.value.resolve(
+                    listener,
+                    kFunction,
+                    evt
+                )
+            }
+            kFunction.callBy(args)
+        }
     }
 
     companion object {
