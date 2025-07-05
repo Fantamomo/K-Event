@@ -11,7 +11,7 @@ package com.fantamomo.kevent
  * ```
  * class MyListener : Listener {
  *     @Register
- *     fun onMyEvent(event: MyEvent) {
+ *     fun onMyEvent(event: MyEvent?) {
  *         configuration(event) {
  *             // Configure event handling options
  *             priority = Priority.HIGH
@@ -25,5 +25,4 @@ package com.fantamomo.kevent
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
-interface Listener {
-}
+interface Listener
