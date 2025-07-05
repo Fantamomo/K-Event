@@ -5,6 +5,18 @@ import com.fantamomo.kevent.Listener
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 
+/**
+ * Interface for resolving dynamic or static parameters for listener methods in an event system.
+ *
+ * Listener methods in the event system can define additional parameters, which are resolved
+ * dynamically or statically when the method is invoked. Implementations of this interface
+ * provide mechanisms to fulfill these parameters by supplying appropriate values based on
+ * context such as the listener, method information, or the event being dispatched.
+ *
+ * @param T The type of the parameter value resolved by this resolver. Must be a non-nullable type.
+ * @author Fantamomo
+ * @since 1.0-SNAPSHOT
+ */
 interface ListenerParameterResolver<T : Any> : EventManagerComponent<ListenerParameterResolver<T>> {
     @Suppress("UNCHECKED_CAST")
     override val key
