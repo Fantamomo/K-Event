@@ -60,7 +60,7 @@ class DefaultEventManager internal constructor(
             val parameters = method.parameters
             val resolvers = parameters.dropWhile { it.index < 2 }.associateWith { parameter ->
                 parameterResolver.find {
-                    (parameter.findAnnotation<InjectionName>()?.value ?: it.name) == parameter.name && it.type == parameter.type.classifier }
+                    it.name == (parameter.findAnnotation<InjectionName>()?.value ?: parameter.name) && it.type == parameter.type.classifier }
                     ?: continue@out
             }
             if (parameters.size < 2) continue
