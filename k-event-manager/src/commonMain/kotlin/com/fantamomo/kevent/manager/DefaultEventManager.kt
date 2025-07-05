@@ -61,7 +61,7 @@ class DefaultEventManager internal constructor(components: EventManagerComponent
             if (listener.isEmpty()) continue
             if (!target.isSuperclassOf(eventClass)) continue
 
-            called = called || call(event, listener)
+            called = called or call(event, listener)
         }
         if (!called && eventClass != DeadEvent::class) dispatch(DeadEvent(event))
     }
