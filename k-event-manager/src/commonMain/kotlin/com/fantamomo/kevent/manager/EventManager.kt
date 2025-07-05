@@ -57,6 +57,8 @@ interface EventManager {
     fun <E : Dispatchable> register(
         event: KClass<E>,
         configuration: EventConfiguration<E> = EventConfiguration.default(),
-        handler: (E) -> Unit
+        handler: (E) -> Unit,
     )
+
+    fun unregister(listener: Listener)
 }
