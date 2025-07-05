@@ -219,7 +219,20 @@ class DefaultEventManager internal constructor(
         val configuration: EventConfiguration<E>,
     ) {
         abstract val method: (E) -> Unit
-        operator fun invoke(event: E) = method(event)
+
+        operator fun invoke(event: E) {
+            if (configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)) {
+                if (isCurrentlyCalled) return
+                isCurrentlyCalled = true
+            }
+            try {
+                method(event)
+            } finally {
+                isCurrentlyCalled = false
+            }
+        }
+
+        @Volatile protected var isCurrentlyCalled: Boolean = false
     }
 
     private inner class RegisteredFunctionListener<E : Dispatchable>(
