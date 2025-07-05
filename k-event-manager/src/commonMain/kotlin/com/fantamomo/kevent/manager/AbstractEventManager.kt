@@ -1,6 +1,7 @@
 package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.ConfigurationCapturedException
+import com.fantamomo.kevent.DeadEvent
 import com.fantamomo.kevent.Event
 import com.fantamomo.kevent.EventConfiguration
 import com.fantamomo.kevent.Key
@@ -104,10 +105,12 @@ abstract class AbstractEventManager : EventManager {
     ) {}
 
     override fun dispatch(event: Event) {
+        if (look.read { listenerMap.isEmpty() }) return
         val eventClass = event::class
+        var wasCalled = false
         for ((registeredClass, listeners) in look.read { listenerMap.iterator() }) {
             if (!eventClass.isSubclassOf(registeredClass)) continue
-
+            wasCalled = true
             for (listener in listeners) {
                 @Suppress("UNCHECKED_CAST")
                 listener as RegisteredListener<Event>
@@ -130,6 +133,9 @@ abstract class AbstractEventManager : EventManager {
                     listener.isCurrentlyCalled = false
                 }
             }
+        }
+        if (!wasCalled && eventClass != DeadEvent::class) {
+            dispatch(DeadEvent(event))
         }
     }
 
