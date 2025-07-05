@@ -91,6 +91,12 @@ class DefaultEventManager internal constructor(
         getOrCreateHandlerList(event).add(listener)
     }
 
+    override fun unregister(listener: Listener) {
+        handlers.forEach {
+            it.value.remove(listener)
+        }
+    }
+
     private fun handleException(e: Throwable, listener: RegisteredListener<*>) {
         try {
             exceptionHandler.handle(
@@ -125,6 +131,12 @@ class DefaultEventManager internal constructor(
             synchronized(this) {
                 listeners.add(listener)
                 dirty = true
+            }
+        }
+
+        fun remove(listener: Listener) {
+            synchronized(this) {
+                listeners.removeAll { it.listener === listener }
             }
         }
 
