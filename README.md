@@ -64,6 +64,8 @@ This pattern ensures events are lightweight, fast to dispatch, and predictable.
 
 You can add any number of fields to an event. There are no restrictions on how complex they can be. This design makes K-Event flexible enough for UI events, network callbacks, system messages, and more.
 
+> Events can be generic, but the `DefaultEventManager` does not check the type, which means that a listener that listens to `CustomEvent<String>` also receives events like `CustomEvent<Int>`
+
 > For more infos about `Event` and `Dispatchable`: [link](#-dispatchable-vs-event)
 
 ---
