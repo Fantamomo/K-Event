@@ -204,7 +204,7 @@ class DefaultEventManager internal constructor(
             if (!dirty) return sortedListeners
             synchronized(this) {
                 if (!dirty) return sortedListeners
-                sortedListeners = listeners.sortedBy {
+                sortedListeners = listeners.sortedByDescending {
                     it.configuration.getOrDefault(Key.PRIORITY)
                 }
                 dirty = false
