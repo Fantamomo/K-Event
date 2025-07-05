@@ -50,7 +50,7 @@ import kotlin.jvm.JvmSynthetic
 @Throws(ConfigurationCapturedException::class)
 @OptIn(ExperimentalContracts::class)
 @JvmSynthetic
-inline fun <E : Event> configuration(event: E?, @EventDsl block: EventConfigurationScope<E>.() -> Unit) {
+inline fun <E : Dispatchable> configuration(event: E?, @EventDsl block: EventConfigurationScope<E>.() -> Unit) {
     contract {
         returns() implies (event != null)
         callsInPlace(block, InvocationKind.AT_MOST_ONCE)
@@ -95,10 +95,11 @@ inline fun <E : Event> configuration(event: E?, @EventDsl block: EventConfigurat
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
+@Suppress("NOTHING_TO_INLINE")
 @Throws(ConfigurationCapturedException::class)
 @OptIn(ExperimentalContracts::class)
 @JvmSynthetic
-fun emptyConfiguration(event: Event?) {
+inline fun emptyConfiguration(event: Dispatchable?) {
     contract { returns() implies (event != null) }
     if (event == null) throw ConfigurationCapturedException(EventConfiguration.DEFAULT)
 }
@@ -121,7 +122,7 @@ fun emptyConfiguration(event: Event?) {
  */
 @OptIn(ExperimentalContracts::class)
 @JvmSynthetic
-inline fun <E : Event> createConfigurationScope(block: @EventDsl EventConfigurationScope<E>.() -> Unit): EventConfiguration<E> {
+inline fun <E : Dispatchable> createConfigurationScope(block: @EventDsl EventConfigurationScope<E>.() -> Unit): EventConfiguration<E> {
     contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
     val scope = EventConfigurationScope<E>()
     scope.block()
