@@ -1,7 +1,7 @@
 package com.fantamomo.kevent.manager.components
 
-import com.fantamomo.kevent.Dispatchable
 import com.fantamomo.kevent.Listener
+import kotlin.reflect.KFunction
 
 abstract class ExceptionHandler : EventManagerComponent<ExceptionHandler> {
     override val key: EventManagerComponent.Key<ExceptionHandler>
@@ -11,13 +11,13 @@ abstract class ExceptionHandler : EventManagerComponent<ExceptionHandler> {
         override val clazz = ExceptionHandler::class
     }
 
-    abstract fun handle(exception: Throwable, listener: Listener?, methode: (Dispatchable) -> Unit)
+    abstract fun handle(exception: Throwable, listener: Listener?, methode: KFunction<*>?)
 
     object Empty : ExceptionHandler() {
         override fun handle(
             exception: Throwable,
             listener: Listener?,
-            methode: (Dispatchable) -> Unit,
+            methode: KFunction<*>?,
         ) {}
     }
 }
