@@ -6,12 +6,15 @@ import com.fantamomo.kevent.manager.components.ExceptionHandler
 import com.fantamomo.kevent.manager.components.getOrThrow
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.logging.Level
+import java.util.logging.Logger
 import kotlin.reflect.KClass
 import kotlin.reflect.KVisibility
 import kotlin.reflect.full.declaredMemberFunctions
 import kotlin.reflect.full.hasAnnotation
 import kotlin.reflect.full.isSuperclassOf
 import kotlin.reflect.jvm.isAccessible
+import kotlin.reflect.jvm.jvmName
 
 class DefaultEventManager internal constructor(
     components: EventManagerComponent<*>
@@ -87,6 +90,20 @@ class DefaultEventManager internal constructor(
         getOrCreateHandlerList(event).add(listener)
     }
 
+    private fun handleException(e: Throwable, listener: Listener?, method: (Dispatchable) -> Unit) {
+        try {
+            exceptionHandler.handle(
+                e,
+                listener,
+                method
+            )
+        } catch (e: Throwable) {
+            // if the handler threw an exception... well, log it
+            logger.log(Level.SEVERE, "The handler which should handle a exception threw an exception", e)
+            logger.log(Level.SEVERE, "Original exception (from ${listener?.let { it::class.jvmName }}", e)
+        }
+    }
+
     private fun <E : Dispatchable> getOrCreateHandlerList(type: KClass<E>): HandlerList<E> {
         @Suppress("UNCHECKED_CAST")
         return handlers.computeIfAbsent(type) { HandlerList<E>() } as HandlerList<E>
@@ -121,7 +138,7 @@ class DefaultEventManager internal constructor(
                     called = true
                 } catch (e: Throwable) {
                     @Suppress("UNCHECKED_CAST")
-                    exceptionHandler.handle(e, handler.listener, handler.method as (Dispatchable) -> Unit)
+                    handleException(e, handler.listener, handler.method as (Dispatchable) -> Unit)
                 }
             }
             return called
@@ -147,5 +164,9 @@ class DefaultEventManager internal constructor(
         val configuration: EventConfiguration<E>
     ) {
         operator fun invoke(event: E) = method(event)
+    }
+
+    companion object {
+        private val logger = Logger.getLogger(DefaultEventManager::class.jvmName)
     }
 }
