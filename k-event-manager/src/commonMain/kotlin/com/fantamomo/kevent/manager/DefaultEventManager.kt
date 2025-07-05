@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.reflect.KClass
+import kotlin.reflect.KFunction
 import kotlin.reflect.KVisibility
 import kotlin.reflect.full.declaredMemberFunctions
 import kotlin.reflect.full.hasAnnotation
@@ -17,7 +18,7 @@ import kotlin.reflect.jvm.isAccessible
 import kotlin.reflect.jvm.jvmName
 
 class DefaultEventManager internal constructor(
-    components: EventManagerComponent<*>
+    components: EventManagerComponent<*>,
 ) : EventManager {
 
     private val handlers: ConcurrentHashMap<KClass<out Dispatchable>, HandlerList<out Dispatchable>> =
@@ -48,10 +49,10 @@ class DefaultEventManager internal constructor(
                 if (config !is EventConfiguration<*>) continue
 
                 @Suppress("UNCHECKED_CAST")
-                val handler = RegisteredListener(
+                val handler = RegisteredKFunctionListener(
                     type = typedEventClass,
                     listener = listener,
-                    method = { evt -> method.call(listener, evt) },
+                    kFunction = method,
                     configuration = config as EventConfiguration<Dispatchable>
                 )
 
@@ -79,9 +80,9 @@ class DefaultEventManager internal constructor(
     override fun <E : Dispatchable> register(
         event: KClass<E>,
         configuration: EventConfiguration<E>,
-        handler: (E) -> Unit
+        handler: (E) -> Unit,
     ) {
-        val listener = RegisteredListener(
+        val listener = RegisteredFunctionListener(
             type = event,
             listener = null,
             method = handler,
@@ -90,17 +91,21 @@ class DefaultEventManager internal constructor(
         getOrCreateHandlerList(event).add(listener)
     }
 
-    private fun handleException(e: Throwable, listener: Listener?, method: (Dispatchable) -> Unit) {
+    private fun handleException(e: Throwable, listener: RegisteredListener<*>) {
         try {
             exceptionHandler.handle(
                 e,
-                listener,
-                method
+                listener.listener,
+                (listener as? RegisteredKFunctionListener<*>)?.kFunction
             )
-        } catch (e: Throwable) {
+        } catch (newException: Throwable) {
             // if the handler threw an exception... well, log it
-            logger.log(Level.SEVERE, "The handler which should handle a exception threw an exception", e)
-            logger.log(Level.SEVERE, "Original exception (from ${listener?.let { it::class.jvmName }}", e)
+            logger.log(Level.SEVERE, "The handler which should handle a exception threw an exception", newException)
+            val message = "The original exception was (" + when (listener) {
+                is RegisteredFunctionListener<*> -> "lambda: ${listener.method::class.jvmName}"
+                is RegisteredKFunctionListener<*> -> "from: ${listener.listener::class.jvmName}#${listener.kFunction.name}"
+            } + "):"
+            logger.log(Level.SEVERE, message, e)
         }
     }
 
@@ -111,8 +116,10 @@ class DefaultEventManager internal constructor(
 
     private inner class HandlerList<E : Dispatchable> {
         private val listeners: MutableList<RegisteredListener<E>> = mutableListOf()
-        @Volatile private var sortedListeners: List<RegisteredListener<E>> = emptyList()
-        @Volatile private var dirty: Boolean = true
+        @Volatile
+        private var sortedListeners: List<RegisteredListener<E>> = emptyList()
+        @Volatile
+        private var dirty: Boolean = true
 
         fun add(listener: RegisteredListener<E>) {
             synchronized(this) {
@@ -138,7 +145,7 @@ class DefaultEventManager internal constructor(
                     called = true
                 } catch (e: Throwable) {
                     @Suppress("UNCHECKED_CAST")
-                    handleException(e, handler.listener, handler.method as (Dispatchable) -> Unit)
+                    handleException(e, handler)
                 }
             }
             return called
@@ -157,13 +164,29 @@ class DefaultEventManager internal constructor(
         }
     }
 
-    private inner class RegisteredListener<E : Dispatchable>(
+    private sealed class RegisteredListener<E : Dispatchable>(
         val type: KClass<E>,
-        val listener: Listener?,
-        val method: (E) -> Unit,
-        val configuration: EventConfiguration<E>
+        open val listener: Listener?,
+        val configuration: EventConfiguration<E>,
     ) {
+        abstract val method: (E) -> Unit
         operator fun invoke(event: E) = method(event)
+    }
+
+    private inner class RegisteredFunctionListener<E : Dispatchable>(
+        type: KClass<E>,
+        listener: Listener?,
+        override val method: (E) -> Unit,
+        configuration: EventConfiguration<E>,
+    ) : RegisteredListener<E>(type, listener, configuration)
+
+    private inner class RegisteredKFunctionListener<E : Dispatchable>(
+        type: KClass<E>,
+        override val listener: Listener,
+        val kFunction: KFunction<*>,
+        configuration: EventConfiguration<E>,
+    ) : RegisteredListener<E>(type, listener, configuration) {
+        override val method: (E) -> Unit = { evt -> kFunction.call(listener, evt) }
     }
 
     companion object {
