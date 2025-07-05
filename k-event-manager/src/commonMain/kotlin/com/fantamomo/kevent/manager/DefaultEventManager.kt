@@ -1,3 +1,207 @@
 package com.fantamomo.kevent.manager
 
-class DefaultEventManager : AbstractEventManager()
+import com.fantamomo.kevent.*
+import com.fantamomo.kevent.manager.components.EventManagerComponent
+import com.fantamomo.kevent.manager.components.ExceptionHandler
+import com.fantamomo.kevent.manager.components.getOrThrow
+import java.lang.reflect.InvocationTargetException
+import java.util.concurrent.ConcurrentHashMap
+import java.util.logging.Level
+import java.util.logging.Logger
+import kotlin.reflect.KClass
+import kotlin.reflect.KFunction
+import kotlin.reflect.KVisibility
+import kotlin.reflect.full.declaredMemberFunctions
+import kotlin.reflect.full.hasAnnotation
+import kotlin.reflect.full.isSuperclassOf
+import kotlin.reflect.jvm.isAccessible
+import kotlin.reflect.jvm.jvmName
+
+class DefaultEventManager internal constructor(
+    components: EventManagerComponent<*>,
+) : EventManager {
+
+    private val handlers: ConcurrentHashMap<KClass<out Dispatchable>, HandlerList<out Dispatchable>> =
+        ConcurrentHashMap()
+
+    private val exceptionHandler = components.getOrThrow(ExceptionHandler)
+
+    override fun register(listener: Listener) {
+        val listenerClass = listener::class
+        for (method in listenerClass.declaredMemberFunctions) {
+            if (!method.hasAnnotation<Register>()) continue
+            if (method.visibility != KVisibility.PUBLIC) continue
+
+            val parameters = method.parameters
+            if (parameters.size != 2) continue
+
+            val eventClass = parameters[1].type.classifier as? KClass<*> ?: continue
+            if (!Dispatchable::class.isSuperclassOf(eventClass)) continue
+
+            @Suppress("UNCHECKED_CAST")
+            val typedEventClass = eventClass as KClass<Dispatchable>
+
+            try {
+                method.isAccessible = true
+                method.call(listener, null)
+            } catch (e: InvocationTargetException) {
+                val config = (e.targetException as? ConfigurationCapturedException)?.configuration
+                if (config !is EventConfiguration<*>) continue
+
+                @Suppress("UNCHECKED_CAST")
+                val handler = RegisteredKFunctionListener(
+                    type = typedEventClass,
+                    listener = listener,
+                    kFunction = method,
+                    configuration = config as EventConfiguration<Dispatchable>
+                )
+
+                getOrCreateHandlerList(typedEventClass).add(handler)
+            } catch (_: Throwable) {
+                // Silent fail
+            }
+        }
+    }
+
+    override fun dispatch(event: Dispatchable) {
+        val eventClass = event::class
+        var called = false
+
+        for ((registeredClass, handlerList) in handlers) {
+            if (!registeredClass.isSuperclassOf(eventClass)) continue
+            called = called or handlerList.call(event)
+        }
+
+        if (!called && eventClass != DeadEvent::class) {
+            dispatch(DeadEvent(event))
+        }
+    }
+
+    override fun <E : Dispatchable> register(
+        event: KClass<E>,
+        configuration: EventConfiguration<E>,
+        handler: (E) -> Unit,
+    ) {
+        val listener = RegisteredFunctionListener(
+            type = event,
+            listener = null,
+            method = handler,
+            configuration = configuration
+        )
+        getOrCreateHandlerList(event).add(listener)
+    }
+
+    override fun unregister(listener: Listener) {
+        handlers.forEach {
+            it.value.remove(listener)
+        }
+    }
+
+    private fun handleException(e: Throwable, listener: RegisteredListener<*>) {
+        try {
+            exceptionHandler.handle(
+                e,
+                listener.listener,
+                (listener as? RegisteredKFunctionListener<*>)?.kFunction
+            )
+        } catch (newException: Throwable) {
+            // if the handler threw an exception... well, log it
+            logger.log(Level.SEVERE, "The handler which should handle a exception threw an exception", newException)
+            val message = "The original exception was (" + when (listener) {
+                is RegisteredFunctionListener<*> -> "lambda: ${listener.method::class.jvmName}"
+                is RegisteredKFunctionListener<*> -> "from: ${listener.listener::class.jvmName}#${listener.kFunction.name}"
+            } + "):"
+            logger.log(Level.SEVERE, message, e)
+        }
+    }
+
+    private fun <E : Dispatchable> getOrCreateHandlerList(type: KClass<E>): HandlerList<E> {
+        @Suppress("UNCHECKED_CAST")
+        return handlers.computeIfAbsent(type) { HandlerList<E>() } as HandlerList<E>
+    }
+
+    private inner class HandlerList<E : Dispatchable> {
+        private val listeners: MutableList<RegisteredListener<E>> = mutableListOf()
+        @Volatile
+        private var sortedListeners: List<RegisteredListener<E>> = emptyList()
+        @Volatile
+        private var dirty: Boolean = true
+
+        fun add(listener: RegisteredListener<E>) {
+            synchronized(this) {
+                listeners.add(listener)
+                dirty = true
+            }
+        }
+
+        fun remove(listener: Listener) {
+            synchronized(this) {
+                listeners.removeAll { it.listener === listener }
+            }
+        }
+
+        fun call(event: Dispatchable): Boolean {
+            if (listeners.isEmpty()) return false
+
+            @Suppress("UNCHECKED_CAST")
+            val typedEvent = event as E
+            val currentList = getSortedListeners()
+
+            var called = false
+            for (handler in currentList) {
+                if (handler.configuration.getOrDefault(Key.DISALLOW_SUBTYPES)) {
+                    if (typedEvent::class != handler.type) continue
+                }
+                try {
+                    handler(typedEvent)
+                    called = true
+                } catch (e: Throwable) {
+                    @Suppress("UNCHECKED_CAST")
+                    handleException(e, handler)
+                }
+            }
+            return called
+        }
+
+        private fun getSortedListeners(): List<RegisteredListener<E>> {
+            if (!dirty) return sortedListeners
+            synchronized(this) {
+                if (!dirty) return sortedListeners
+                sortedListeners = listeners.sortedBy {
+                    it.configuration.getOrDefault(Key.PRIORITY)
+                }
+                dirty = false
+                return sortedListeners
+            }
+        }
+    }
+
+    private sealed class RegisteredListener<E : Dispatchable>(
+        val type: KClass<E>,
+        open val listener: Listener?,
+        val configuration: EventConfiguration<E>,
+    ) {
+        abstract val method: (E) -> Unit
+        operator fun invoke(event: E) = method(event)
+    }
+
+    private inner class RegisteredFunctionListener<E : Dispatchable>(
+        type: KClass<E>,
+        listener: Listener?,
+        override val method: (E) -> Unit,
+        configuration: EventConfiguration<E>,
+    ) : RegisteredListener<E>(type, listener, configuration)
+
+    private inner class RegisteredKFunctionListener<E : Dispatchable>(
+        type: KClass<E>,
+        override val listener: Listener,
+        val kFunction: KFunction<*>,
+        configuration: EventConfiguration<E>,
+    ) : RegisteredListener<E>(type, listener, configuration) {
+        override val method: (E) -> Unit = { evt -> kFunction.call(listener, evt) }
+    }
+
+    companion object {
+        private val logger = Logger.getLogger(DefaultEventManager::class.jvmName)
+    }
+}

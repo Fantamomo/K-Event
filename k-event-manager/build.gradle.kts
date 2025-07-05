@@ -13,6 +13,7 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
                 implementation(project(":k-event-api"))
                 implementation("org.jetbrains.kotlin:kotlin-reflect")
             }
