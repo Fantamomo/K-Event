@@ -19,7 +19,7 @@ package com.fantamomo.kevent
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
-class EventConfiguration<E : Event>(private val data: Map<Key<*>, Any?>) {
+class EventConfiguration<E : Dispatchable>(private val data: Map<Key<*>, Any?>) {
     /**
      * Creates a new configuration from an [EventConfigurationScope].
      * 
@@ -86,6 +86,6 @@ class EventConfiguration<E : Event>(private val data: Map<Key<*>, Any?>) {
          * @return The default [EventConfiguration] instance for the specified event type [E].
          */
         @Suppress("UNCHECKED_CAST")
-        fun <E : Event> default() = DEFAULT as EventConfiguration<E>
+        fun <E : Dispatchable> default() = DEFAULT as EventConfiguration<E>
     }
 }
