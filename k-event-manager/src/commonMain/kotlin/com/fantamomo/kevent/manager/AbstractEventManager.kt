@@ -2,6 +2,7 @@ package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.ConfigurationCapturedException
 import com.fantamomo.kevent.DeadEvent
+import com.fantamomo.kevent.Dispatchable
 import com.fantamomo.kevent.Event
 import com.fantamomo.kevent.EventConfiguration
 import com.fantamomo.kevent.Key
@@ -25,7 +26,7 @@ import kotlin.reflect.jvm.isAccessible
 
 abstract class AbstractEventManager : EventManager {
 
-    protected val listenerMap = mutableMapOf<KClass<out Event>, MutableList<RegisteredListener<out Event>>>()
+    protected val listenerMap = mutableMapOf<KClass<out Dispatchable>, MutableList<RegisteredListener<out Dispatchable>>>()
     protected val look = ReentrantReadWriteLock()
 
     @Suppress("UNCHECKED_CAST")
@@ -84,7 +85,7 @@ abstract class AbstractEventManager : EventManager {
         }
     }
 
-    protected open fun <E : Event> buildRegisteredListener(
+    protected open fun <E : Dispatchable> buildRegisteredListener(
         listener: Listener?,
         eventClass: KClass<E>,
         configuration: EventConfiguration<E>,
@@ -98,13 +99,13 @@ abstract class AbstractEventManager : EventManager {
     protected open fun onMissingConfigurationException(listener: Listener, method: KFunction<*>) {}
     protected open fun onUnexpectedException(listener: Listener, method: KFunction<*>, e: Throwable) {}
 
-    protected open fun <E : Event> onHandlerException(
+    protected open fun <E : Dispatchable> onHandlerException(
         registeredListener: RegisteredListener<E>,
         event: E,
         e: Throwable
     ) {}
 
-    override fun dispatch(event: Event) {
+    override fun dispatch(event: Dispatchable) {
         if (look.read { listenerMap.isEmpty() }) return
         val eventClass = event::class
         var wasCalled = false
@@ -113,7 +114,7 @@ abstract class AbstractEventManager : EventManager {
             wasCalled = true
             for (listener in listeners) {
                 @Suppress("UNCHECKED_CAST")
-                listener as RegisteredListener<Event>
+                listener as RegisteredListener<Dispatchable>
                 if (listener.disallowSubtypes && eventClass != listener.eventClass) continue
                 if (listener.exclusiveListenerProcessing && listener.isCurrentlyCalled) continue
                 listener.isCurrentlyCalled = true
@@ -139,12 +140,12 @@ abstract class AbstractEventManager : EventManager {
         }
     }
 
-    override fun <E : Event> register(event: KClass<E>, configuration: EventConfiguration<E>, handler: (E) -> Unit) {
+    override fun <E : Dispatchable> register(event: KClass<E>, configuration: EventConfiguration<E>, handler: (E) -> Unit) {
         val listeners = look.write { listenerMap.computeIfAbsent(event) { mutableListOf() } }
         listeners.add(buildRegisteredListener(null, event, configuration, handler))
     }
 
-    protected open class RegisteredListener<E : Event>(
+    protected open class RegisteredListener<E : Dispatchable>(
         val listener: Listener?,
         val eventClass: KClass<E>,
         val configuration: EventConfiguration<E>,

@@ -18,4 +18,4 @@ package com.fantamomo.kevent
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
-fun <E : Event, T> EventConfigurationScope<E>.getOrDefault(key: Key<T>): T = get(key) ?: key.defaultValue
+fun <T> EventConfigurationScope<*>.getOrDefault(key: Key<T>): T = get(key) ?: key.defaultValue

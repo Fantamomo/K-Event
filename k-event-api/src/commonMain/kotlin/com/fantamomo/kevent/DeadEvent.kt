@@ -1,5 +1,7 @@
 package com.fantamomo.kevent
 
+import kotlin.reflect.KClass
+
 /**
  * Represents an event that could not be delivered to any registered listeners.
  *
@@ -18,4 +20,8 @@ package com.fantamomo.kevent
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
-class DeadEvent(val event: Event) : Event()
+class DeadEvent(val event: Dispatchable) : Dispatchable() {
+    companion object : Listenable<DeadEvent> {
+        override val eventType: KClass<DeadEvent> = DeadEvent::class
+    }
+}

@@ -37,7 +37,7 @@ interface EventManager {
      *
      * @param event The event instance to be dispatched to the appropriate listeners.
      */
-    fun dispatch(event: Event)
+    fun dispatch(event: Dispatchable)
 
     /**
      * Registers an event-specific handler with its configuration.
@@ -54,7 +54,7 @@ interface EventManager {
      * @see createConfigurationScope
      * @see EventConfigurationScope
      */
-    fun <E : Event> register(
+    fun <E : Dispatchable> register(
         event: KClass<E>,
         configuration: EventConfiguration<E> = EventConfiguration.default(),
         handler: (E) -> Unit

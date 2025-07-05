@@ -32,7 +32,7 @@ package com.fantamomo.kevent
  * @since 1.0-SNAPSHOT
  */
 @EventDsl
-class EventConfigurationScope<E : Event> {
+class EventConfigurationScope<E : Dispatchable> {
     /**
      * Internal storage for configuration data.
      */
