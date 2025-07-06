@@ -138,7 +138,7 @@ configuration(event) {
 * `priority`: Determines handler execution order. Higher runs first.
 * `disallowSubtypes`: If `true`, only matches this exact event class.
 * `exclusiveListenerProcessing`: Prevents this handler from running concurrently. 
-This only applies to the respective Event Manager, several EventManagers can call it simultaneously
+This applies per EventManager instance — multiple managers may still invoke the handler concurrently.
 * `name`: Optional debug label for this method.
 
 The configuration is stored inside the manager’s registry and used every time this event is dispatched.
@@ -219,7 +219,7 @@ configuration(event) {
 }
 ```
 
-You can then use these keys in your event manager, coroutine dispatcher, or plugin logic to alter behavior dynamically.
+Use these keys in your manager or plugin logic to modify behavior dynamically.
 
 ---
 
