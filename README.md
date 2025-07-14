@@ -368,7 +368,7 @@ val manager = EventManager(parameter)
 
 There are two types of `ListenerParameterResolver`:
 
-* `static`: The type will is always the same.
+* `static`: The type does not change.
 * `dynamic`: The type can change (e.g. because of listeners).
 Note that a dynamic type **must** provide a default value (e.g. `0`, empty, ...), which is uses when registering a listener, so that the signatur is completed.
 
