@@ -54,7 +54,9 @@ class DefaultEventManager internal constructor(
             val parameters = method.parameters
             val resolvers = parameters.dropWhile { it.index < 2 }.associateWith { parameter ->
                 parameterResolver.find {
-                    it.name == (parameter.findAnnotation<InjectionName>()?.value ?: parameter.name) && it.type == parameter.type.classifier }
+                    it.name == (parameter.findAnnotation<InjectionName>()?.value
+                        ?: parameter.name) && it.type == parameter.type.classifier
+                }
                     ?: continue@out
             }
             if (parameters.size < 2) continue
@@ -184,7 +186,7 @@ class DefaultEventManager internal constructor(
                 if (handler.configuration.getOrDefault(Key.DISALLOW_SUBTYPES)) {
                     if (typedEvent::class != handler.type) continue
                 }
-                if (handler is RegisteredKFunctionListener<E> && !handler.allowGenericsTypes(genericTypes)) continue
+                if (genericTypes.isNotEmpty() && handler is RegisteredKFunctionListener<E> && !handler.allowGenericsTypes(genericTypes)) continue
                 try {
                     handler(typedEvent)
                     called = true
@@ -228,7 +230,8 @@ class DefaultEventManager internal constructor(
             }
         }
 
-        @Volatile protected var isCurrentlyCalled: Boolean = false
+        @Volatile
+        protected var isCurrentlyCalled: Boolean = false
     }
 
     private inner class RegisteredFunctionListener<E : Dispatchable>(
@@ -265,6 +268,7 @@ class DefaultEventManager internal constructor(
                     typeArguments.mapIndexed { index, projection ->
                         if (projection.variance == null) return@mapIndexed true
                         val type = projection.type?.classifier as? KClass<*> ?: return@mapIndexed false
+                        @Suppress("KotlinConstantConditions")
                         when (projection.variance) {
                             KVariance.INVARIANT -> type == types[index]
                             KVariance.IN -> types[index].isSuperclassOf(type)
