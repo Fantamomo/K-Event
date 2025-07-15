@@ -20,8 +20,12 @@ import kotlin.reflect.KClass
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
-data class DeadEvent(val event: Dispatchable) : Dispatchable() {
-    companion object : Listenable<DeadEvent> {
-        override val eventType: KClass<DeadEvent> = DeadEvent::class
+data class DeadEvent<D : Dispatchable>(val event: D) : Dispatchable(), SingleGenericTypedEvent {
+
+    override fun extractGenericType() = event::class
+
+    companion object : Listenable<DeadEvent<Nothing>> {
+        @Suppress("UNCHECKED_CAST")
+        override val eventType: KClass<DeadEvent<Nothing>> = DeadEvent::class as KClass<DeadEvent<Nothing>>
     }
 }
