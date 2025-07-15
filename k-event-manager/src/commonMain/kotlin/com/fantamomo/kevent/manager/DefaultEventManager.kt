@@ -11,14 +11,8 @@ import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
 import java.util.logging.Logger
-import kotlin.reflect.KClass
-import kotlin.reflect.KFunction
-import kotlin.reflect.KParameter
-import kotlin.reflect.KVisibility
-import kotlin.reflect.full.declaredMemberFunctions
-import kotlin.reflect.full.findAnnotation
-import kotlin.reflect.full.hasAnnotation
-import kotlin.reflect.full.isSuperclassOf
+import kotlin.reflect.*
+import kotlin.reflect.full.*
 import kotlin.reflect.jvm.isAccessible
 import kotlin.reflect.jvm.jvmName
 
@@ -101,10 +95,11 @@ class DefaultEventManager internal constructor(
     override fun dispatch(event: Dispatchable) {
         val eventClass = event::class
         var called = false
+        val genericTypes = (event as? GenericTypedEvent)?.extractGenericTypes() ?: listOf()
 
         for ((registeredClass, handlerList) in handlers) {
             if (!registeredClass.isSuperclassOf(eventClass)) continue
-            called = called or handlerList.call(event)
+            called = called or handlerList.call(event, genericTypes)
         }
 
         if (!called && eventClass != DeadEvent::class) {
@@ -177,7 +172,7 @@ class DefaultEventManager internal constructor(
             }
         }
 
-        fun call(event: Dispatchable): Boolean {
+        fun call(event: Dispatchable, genericTypes: List<KClass<*>>): Boolean {
             if (listeners.isEmpty()) return false
 
             @Suppress("UNCHECKED_CAST")
@@ -189,6 +184,7 @@ class DefaultEventManager internal constructor(
                 if (handler.configuration.getOrDefault(Key.DISALLOW_SUBTYPES)) {
                     if (typedEvent::class != handler.type) continue
                 }
+                if (handler is RegisteredKFunctionListener<E> && !handler.allowGenericsTypes(genericTypes)) continue
                 try {
                     handler(typedEvent)
                     called = true
@@ -251,6 +247,8 @@ class DefaultEventManager internal constructor(
     ) : RegisteredListener<E>(type, listener, configuration) {
         private val thisParameter = kFunction.parameters[0]
         private val eventParameter = kFunction.parameters[1]
+        val actualType = eventParameter.type
+        val typeArguments by lazy { actualType.arguments }
         override val method: (E) -> Unit = { evt ->
             val args = mapOf(thisParameter to listener, eventParameter to evt) + resolvers.mapValues {
                 it.value.resolve(
@@ -260,6 +258,20 @@ class DefaultEventManager internal constructor(
                 )
             }
             kFunction.callBy(args)
+        }
+
+        fun allowGenericsTypes(types: List<KClass<*>>): Boolean {
+            return typeArguments.size == types.size &&
+                    typeArguments.mapIndexed { index, projection ->
+                        if (projection.variance == null) return@mapIndexed true
+                        val type = projection.type?.classifier as? KClass<*> ?: return@mapIndexed false
+                        when (projection.variance) {
+                            KVariance.INVARIANT -> type == types[index]
+                            KVariance.IN -> types[index].isSuperclassOf(type)
+                            KVariance.OUT -> types[index].isSubclassOf(type)
+                            null -> true
+                        }
+                    }.all { it }
         }
     }
 
