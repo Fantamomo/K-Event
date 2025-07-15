@@ -64,7 +64,7 @@ This pattern ensures events are lightweight, fast to dispatch, and predictable.
 
 You can add any number of fields to an event. There are no restrictions on how complex they can be. This design makes K-Event flexible enough for UI events, network callbacks, system messages, and more.
 
-> Events can be generic, but the `DefaultEventManager` does not check the type, which means that a listener that listens to `CustomEvent<String>` also receives events like `CustomEvent<Int>`
+> Events **can** be generic see [Generic Events](#generic-events)
 
 > For more infos about `Event` and `Dispatchable`: [link](#-dispatchable-vs-event)
 
@@ -255,7 +255,7 @@ If an event is dispatched but no handlers exist, a `DeadEvent` is emitted instea
 ```kotlin
 class DeadEventLogger : Listener {
     @Register
-    fun onDead(event: DeadEvent?) {
+    fun onDead(event: DeadEvent<*>?) {
         emptyConfiguration(event)
         println("Unhandled event: ${event.event::class.simpleName}")
     }
@@ -337,6 +337,64 @@ the listener can be registered.
 
 Sometimes you need in the function another variable name instead of the injection name,
 if that happened you can use `@InjectionName`, where the name in brackets is the name that is uses in the system.
+
+---
+
+## Generic Events
+
+K-Event support generic events.
+
+This means that an event that is generic (like DeadEvent) can be handled by listeners.
+
+Example:
+
+```kotlin
+data class MyGenericEvent<T : Any>(val value: T) : Event()
+
+class MyListener : Listener {
+    
+    @Register
+    fun onMyEvent(event: MyGenericEvent<*>?) {
+        //...
+    }
+    
+    @Register
+    fun onMyEventString(event: MyGenericEvent<String>?) {
+        //...
+    }
+}
+```
+
+The `DefaultEventManager` **can not** check the generic type at runtime.
+In this case both of the listeners will be called when a event like `MyGenericEvent<Int>` is called.
+That is a problem because in `onMyEventString` we want the event with `String` but get it with `Int`.
+
+K-Event adds two new interfaces `GenericTypedEvent` and `SingleGenericTypedEvent`.
+
+> Listeners can use `*`, `out T`, `T` and `in T`
+
+
+```kotlin
+data class MyGenericEvent<T : Any>(val value: T) : Event(), SingleGenericTypedEvent {
+    override fun extractGenericType(): KClass<*> = value::class
+}
+
+class MyListener : Listener {
+    
+    @Register
+    fun onMyEvent(event: MyGenericEvent<*>?) {
+        //...
+    }
+    
+    @Register
+    fun onMyEventString(event: MyGenericEvent<String>?) {
+        //...
+    }
+}
+```
+
+With `SingleGenericTypedEvent` the event manager **can** check the type at runtime and when `MyGenericEvent<Int>` is dispatched,
+only `onMyEvent` is called. 
 
 ---
 
