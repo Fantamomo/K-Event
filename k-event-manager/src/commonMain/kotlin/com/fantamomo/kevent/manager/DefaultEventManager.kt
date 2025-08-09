@@ -3,10 +3,7 @@ package com.fantamomo.kevent.manager
 import com.fantamomo.kevent.*
 import com.fantamomo.kevent.manager.components.*
 import com.fantamomo.kevent.utils.InjectionName
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.job
+import kotlinx.coroutines.*
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
@@ -40,7 +37,8 @@ class DefaultEventManager internal constructor(
                         "scope",
                         CoroutineScope::class,
                         CoroutineScope(Dispatchers.Default + SupervisorJob(scope.coroutineContext.job))
-                    )
+                    ) +
+                    IsWaitingParameterResolver
         }
         parameterResolver = components.getAll(ListenerParameterResolver.Key)
     }
@@ -52,6 +50,8 @@ class DefaultEventManager internal constructor(
             if (method.visibility != KVisibility.PUBLIC) continue
 
             val parameters = method.parameters
+            if (parameters.size < 2) continue
+
             val resolvers = parameters.dropWhile { it.index < 2 }.associateWith { parameter ->
                 parameterResolver.find {
                     it.name == (parameter.findAnnotation<InjectionName>()?.value
@@ -59,7 +59,6 @@ class DefaultEventManager internal constructor(
                 }
                     ?: continue@out
             }
-            if (parameters.size < 2) continue
 
             val eventClass = parameters[1].type.classifier as? KClass<*> ?: continue
             if (!Dispatchable::class.isSuperclassOf(eventClass)) continue
@@ -89,7 +88,7 @@ class DefaultEventManager internal constructor(
                 getOrCreateHandlerList(typedEventClass).add(handler)
                 continue
             }
-            
+
             try {
                 method.isAccessible = true
                 method.callBy(arguments)
@@ -121,6 +120,21 @@ class DefaultEventManager internal constructor(
         for ((registeredClass, handlerList) in handlers) {
             if (!registeredClass.isSuperclassOf(eventClass)) continue
             called = called or handlerList.call(event, genericTypes)
+        }
+
+        if (!called && eventClass != DeadEvent::class) {
+            dispatch(DeadEvent(event))
+        }
+    }
+
+    override suspend fun dispatchSuspend(event: Dispatchable) {
+        val eventClass = event::class
+        var called = false
+        val genericTypes = (event as? GenericTypedEvent)?.extractGenericTypes() ?: listOf()
+
+        for ((registeredClass, handlerList) in handlers) {
+            if (!registeredClass.isSuperclassOf(eventClass)) continue
+            called = called or handlerList.callSuspend(event, genericTypes)
         }
 
         if (!called && eventClass != DeadEvent::class) {
@@ -205,9 +219,54 @@ class DefaultEventManager internal constructor(
                 if (handler.configuration.getOrDefault(Key.DISALLOW_SUBTYPES)) {
                     if (typedEvent::class != handler.type) continue
                 }
-                if (genericTypes.isNotEmpty() && handler is RegisteredKFunctionListener<E> && !handler.allowGenericsTypes(genericTypes)) continue
+                if (genericTypes.isNotEmpty() && handler is RegisteredKFunctionListener<E> && !handler.allowGenericsTypes(
+                        genericTypes
+                    )
+                ) continue
+                called = true
+                if (handler.isSuspend) {
+                    scope.launch {
+                        try {
+                            handler.invokeSuspend(typedEvent, false)
+                        } catch (e: Throwable) {
+                            @Suppress("UNCHECKED_CAST")
+                            handleException(e, handler)
+                        }
+                    }
+                } else {
+                    try {
+                        handler(typedEvent)
+                    } catch (e: Throwable) {
+                        @Suppress("UNCHECKED_CAST")
+                        handleException(e, handler)
+                    }
+                }
+            }
+            return called
+        }
+
+        suspend fun callSuspend(event: Dispatchable, genericTypes: List<KClass<*>>): Boolean {
+            if (listeners.isEmpty()) return false
+
+            @Suppress("UNCHECKED_CAST")
+            val typedEvent = event as E
+            val currentList = getSortedListeners()
+
+            var called = false
+            for (handler in currentList) {
+                if (handler.configuration.getOrDefault(Key.DISALLOW_SUBTYPES)) {
+                    if (typedEvent::class != handler.type) continue
+                }
+                if (genericTypes.isNotEmpty() && handler is RegisteredKFunctionListener<E> && !handler.allowGenericsTypes(
+                        genericTypes
+                    )
+                ) continue
                 try {
-                    handler(typedEvent)
+                    if (handler.isSuspend) {
+                        handler.invokeSuspend(event, true)
+                    } else {
+                        handler.invoke(typedEvent)
+                    }
                     called = true
                 } catch (e: Throwable) {
                     @Suppress("UNCHECKED_CAST")
@@ -235,6 +294,8 @@ class DefaultEventManager internal constructor(
         open val listener: Listener?,
         val configuration: EventConfiguration<E>,
     ) {
+        open val isSuspend: Boolean = false
+
         abstract val method: (E) -> Unit
 
         operator fun invoke(event: E) {
@@ -248,6 +309,20 @@ class DefaultEventManager internal constructor(
                 isCurrentlyCalled = false
             }
         }
+
+        suspend fun invokeSuspend(event: E, isWaiting: Boolean) {
+            if (configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)) {
+                if (isCurrentlyCalled) return
+                isCurrentlyCalled = true
+            }
+            try {
+                invokeSuspendInternal(event, isWaiting)
+            } finally {
+                isCurrentlyCalled = false
+            }
+        }
+
+        protected open suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {}
 
         @Volatile
         protected var isCurrentlyCalled: Boolean = false
@@ -271,8 +346,17 @@ class DefaultEventManager internal constructor(
         private val eventParameter = kFunction.parameters[1]
         val actualType = eventParameter.type
         val typeArguments by lazy { actualType.arguments }
+        override val isSuspend: Boolean = kFunction.isSuspend
+
         override val method: (E) -> Unit = { evt ->
             val args = mapOf(thisParameter to listener, eventParameter to evt) + resolvers.mapValues {
+                if (it.value is InternalParameterResolver<*>) {
+                    return@mapValues when (it.value) {
+                        IsWaitingParameterResolver -> true
+                        else -> throw IllegalStateException("This should not happen.")
+                    }
+
+                }
                 it.value.resolve(
                     listener,
                     kFunction,
@@ -280,6 +364,23 @@ class DefaultEventManager internal constructor(
                 )
             }
             kFunction.callBy(args)
+        }
+
+        override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {
+            val args = mapOf(thisParameter to listener, eventParameter to event) + resolvers.mapValues {
+                if (it.value is InternalParameterResolver<*>) {
+                    return@mapValues when (it.value) {
+                        IsWaitingParameterResolver -> isWaiting
+                        else -> throw IllegalStateException("This should not happen.")
+                    }
+                }
+                it.value.resolve(
+                    listener,
+                    kFunction,
+                    event
+                )
+            }
+            kFunction.callSuspendBy(args)
         }
 
         fun allowGenericsTypes(types: List<KClass<*>>): Boolean {
@@ -300,5 +401,17 @@ class DefaultEventManager internal constructor(
 
     companion object {
         private val logger = Logger.getLogger(DefaultEventManager::class.jvmName)
+    }
+
+    private sealed interface InternalParameterResolver<T : Any> : ListenerParameterResolver<T> {
+        override fun resolve(listener: Listener?, methode: KFunction<*>?, event: Dispatchable): T {
+            throw IllegalStateException("This method should not be called.")
+        }
+    }
+
+    private data object IsWaitingParameterResolver : InternalParameterResolver<Boolean> {
+        override val name: String = "isWaiting"
+        override val type = Boolean::class
+        override val valueByConfiguration: Boolean = true
     }
 }
