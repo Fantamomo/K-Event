@@ -225,7 +225,7 @@ class DefaultEventManager internal constructor(
                 ) continue
                 called = true
                 if (handler.isSuspend) {
-                    scope.launch {
+                    scope.launch(Dispatchers.Unconfined) {
                         try {
                             handler.invokeSuspend(typedEvent, false)
                         } catch (e: Throwable) {
