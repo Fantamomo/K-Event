@@ -36,7 +36,7 @@ class DefaultEventManager internal constructor(
                     ListenerParameterResolver.static(
                         "scope",
                         CoroutineScope::class,
-                        CoroutineScope(Dispatchers.Default + SupervisorJob(scope.coroutineContext.job))
+                        CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job))
                     ) +
                     IsWaitingParameterResolver
         }
