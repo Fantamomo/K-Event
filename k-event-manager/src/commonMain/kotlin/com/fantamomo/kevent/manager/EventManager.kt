@@ -40,6 +40,18 @@ interface EventManager {
     fun dispatch(event: Dispatchable)
 
     /**
+     * Dispatches an event to all registered event listeners asynchronously.
+     *
+     * This suspend function delivers the given [event] to all applicable listeners
+     * or handlers subscribed to the event type or its supertypes. Unlike its synchronous
+     * counterpart, this method allows asynchronous processing within a coroutine
+     * context, enabling non-blocking or delayed execution of event handling logic.
+     *
+     * @param event The event instance to be dispatched to the appropriate listeners.
+     */
+    suspend fun dispatchSuspend(event: Dispatchable)
+
+    /**
      * Registers an event-specific handler with its configuration.
      *
      * This method allows for registering a handler for a specific type of event. The handler
