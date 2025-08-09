@@ -71,6 +71,25 @@ class DefaultEventManager internal constructor(
                 parameters[0] to listener,
                 parameters[1] to null
             ) + resolvers.mapValues { it.value.valueByConfiguration }
+
+            if (!parameters[1].type.isMarkedNullable) {
+                try {
+                    method.isAccessible = true
+                } catch (_: Throwable) {
+                    continue
+                }
+                val handler = RegisteredKFunctionListener(
+                    type = typedEventClass,
+                    listener = listener,
+                    kFunction = method,
+                    configuration = EventConfiguration.default(),
+                    resolvers = resolvers
+                )
+
+                getOrCreateHandlerList(typedEventClass).add(handler)
+                continue
+            }
+            
             try {
                 method.isAccessible = true
                 method.callBy(arguments)
