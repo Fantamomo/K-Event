@@ -19,8 +19,7 @@ class GameListener : Listener {
     }
 
     @Register
-    fun onLeave(event: PlayerLeftEvent?) {
-        emptyConfiguration(event)
+    fun onLeave(event: PlayerLeftEvent) {
         println("Goodbye ${event.playerId}!")
     }
 }
@@ -102,15 +101,14 @@ fun onJoin(event: PlayerJoinedEvent?)
 
 * Must be annotated with `@Register`
 * Must have exactly **one** parameter (it could have more when using [parameter injection](#-parameter-injection))
-* The parameter must be nullable and extend `Dispatchable`
+* The parameter must be nullable (when using custom configuration) and extend `Dispatchable`
 * Must not have the `@JvmStatic` annotation
 
 #### Why nullable?
 
-K-Event calls each handler twice:
+K-Event calls each handler one time in registration with `null`, to extract the configuration.
 
-1. During registration with `null` to extract configuration
-2. During dispatch with the actual event
+If the parameter is non-nullable, it behaves the same as using `emptyConfiguration`.
 
 This enables per-handler configuration without requiring a separate config function or builder.
 
