@@ -112,8 +112,6 @@ If the parameter is non-nullable, it behaves the same as using `emptyConfigurati
 
 This enables per-handler configuration without requiring a separate config function or builder.
 
-> Currently, K-Event `DefaultEventManager` does not support `suspend` listeners.
-
 > Although listener methods can be open, we strongly advise against it as it may lead to unexpected errors.
 
 ---
@@ -189,6 +187,53 @@ Dispatch is synchronous by default — the method will return only after all han
 ---
 
 ## 💡 Advanced Features
+
+### ⏳ Suspend Handlers and `dispatchSuspend`
+
+K-Event supports not only regular handlers but also **`suspend` handlers**.  
+The event system automatically detects whether a method is `suspend` and invokes it accordingly.
+
+#### Default behavior with `dispatch(...)`
+
+When `manager.dispatch(event)` is called, the system:
+
+1. Collects all handlers that should be invoked for the event.
+2. Sorts them by their configured priority (highest first).
+3. Iterates through each handler in order:
+    - If the handler is **regular (non-suspend)**, it is invoked immediately in the current thread.
+    - If the handler is **`suspend`**, it is launched in a new coroutine starting on `Dispatchers.Unconfined`.
+   This allows the handler to begin execution immediately on the current thread—enabling it to modify the event before any further processing—then it.
+
+This design lets suspend handlers start quickly and potentially mutate the event early, while the overall dispatch does not block on their completion.
+
+---
+
+#### Controlled execution with `dispatchSuspend(...)`
+
+Sometimes you need all handlers — including `suspend` ones — to **fully complete** before continuing.  
+That’s what:
+
+```kotlin
+manager.dispatchSuspend(MyEvent(...))
+````
+
+is for.
+
+In this mode:
+
+1. **All handlers** (regular & `suspend`) are executed in the **configured priority order**.
+2. If a `suspend` handler is encountered, the manager **waits** for it to complete before moving on.
+3. Only then will the next handler be invoked.
+
+The result: a deterministic sequence where each handler finishes before the next one starts.
+
+#### `isWaiting`
+
+Handlers can receive an injected `isWaiting: Boolean` parameter that indicates whether the caller is waiting for the handler to complete.
+This value is `false` when using `dispatch` and `true` when using `dispatchSuspend`.
+
+---
+
 
 ### ✨ Custom Configuration Keys
 
