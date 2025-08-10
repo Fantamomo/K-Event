@@ -2,6 +2,8 @@ package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.*
 import com.fantamomo.kevent.manager.components.*
+import com.fantamomo.kevent.manager.settings.Settings
+import com.fantamomo.kevent.manager.settings.getSetting
 import com.fantamomo.kevent.utils.InjectionName
 import kotlinx.coroutines.*
 import java.lang.reflect.InvocationTargetException
@@ -14,8 +16,7 @@ import kotlin.reflect.jvm.isAccessible
 import kotlin.reflect.jvm.jvmName
 
 class DefaultEventManager internal constructor(
-    components: EventManagerComponent<*>,
-    defaultParameterInjection: Boolean,
+    components: EventManagerComponent<*>
 ) : EventManager {
 
     private val handlers: ConcurrentHashMap<KClass<out Dispatchable>, HandlerList<out Dispatchable>> =
@@ -32,16 +33,25 @@ class DefaultEventManager internal constructor(
 
     init {
         var components = components
-        if (defaultParameterInjection) {
-            components += ListenerParameterResolver.static("manager", EventManager::class, this) +
-                    ListenerParameterResolver.static("logger", Logger::class, logger) +
-                    ListenerParameterResolver.static(
-                        "scope",
-                        CoroutineScope::class,
-                        CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job))
-                    ) +
-                    IsWaitingParameterResolver
-        }
+        if (!components.getSetting(Settings.DISABLE_EVENTMANAGER_INJECTION)) components += ListenerParameterResolver.static(
+            "manager",
+            EventManager::class,
+            this
+        )
+
+        if (!components.getSetting(Settings.DISABLE_LOGGER_INJECTION)) ListenerParameterResolver.static(
+            "logger",
+            Logger::class,
+            logger
+        )
+        if (!components.getSetting(Settings.DISABLE_SCOPE_INJECTION)) ListenerParameterResolver.static(
+            "scope",
+            CoroutineScope::class,
+            CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job))
+        )
+
+        if (!components.getSetting(Settings.DISABLE_IS_WAITING_INJECTION)) components += IsWaitingParameterResolver
+
         parameterResolver = components.getAll(ListenerParameterResolver.Key)
     }
 
