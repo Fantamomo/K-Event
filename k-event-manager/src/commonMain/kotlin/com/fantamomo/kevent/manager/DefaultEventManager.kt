@@ -28,6 +28,8 @@ class DefaultEventManager internal constructor(
     private val scope: CoroutineScope =
         components[EventCoroutineScope]?.scope ?: CoroutineScope(Dispatchers.Default + SupervisorJob())
 
+    private var isClosed = false
+
     init {
         var components = components
         if (defaultParameterInjection) {
@@ -44,6 +46,7 @@ class DefaultEventManager internal constructor(
     }
 
     override fun register(listener: Listener) {
+        checkClosed()
         val listenerClass = listener::class
         out@ for (method in listenerClass.declaredMemberFunctions) {
             if (!method.hasAnnotation<Register>()) continue
@@ -113,6 +116,7 @@ class DefaultEventManager internal constructor(
     }
 
     override fun dispatch(event: Dispatchable) {
+        checkClosed()
         val eventClass = event::class
         var called = false
         val genericTypes = (event as? GenericTypedEvent)?.extractGenericTypes() ?: listOf()
@@ -128,6 +132,7 @@ class DefaultEventManager internal constructor(
     }
 
     override suspend fun dispatchSuspend(event: Dispatchable) {
+        checkClosed()
         val eventClass = event::class
         var called = false
         val genericTypes = (event as? GenericTypedEvent)?.extractGenericTypes() ?: listOf()
@@ -147,6 +152,7 @@ class DefaultEventManager internal constructor(
         configuration: EventConfiguration<E>,
         handler: (E) -> Unit,
     ): RegisteredLambdaHandler {
+        checkClosed()
         val listener = RegisteredFunctionListener(
             type = event,
             listener = null,
@@ -160,7 +166,20 @@ class DefaultEventManager internal constructor(
         }
     }
 
+    override fun close() {
+        checkClosed()
+        isClosed = true
+        handlers.forEach { it.value.close() }
+        handlers.clear()
+        scope.cancel()
+    }
+
+    private fun checkClosed() {
+        if (isClosed) throw IllegalStateException("The event manager is already closed.")
+    }
+
     override fun unregister(listener: Listener) {
+        checkClosed()
         handlers.forEach {
             it.value.remove(listener)
         }
@@ -294,6 +313,12 @@ class DefaultEventManager internal constructor(
 
         fun remove(listener: RegisteredFunctionListener<E>) {
             listeners.remove(listener)
+        }
+
+        fun close() {
+            listeners.clear()
+            sortedListeners = emptyList()
+            dirty = false
         }
     }
 
