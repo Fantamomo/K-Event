@@ -7,9 +7,9 @@ import com.fantamomo.kevent.manager.components.EventManagerComponent
 import com.fantamomo.kevent.manager.components.ExceptionHandler
 import com.fantamomo.kevent.manager.components.addIfAbsent
 
-fun EventManager(defaultParameterInjection: Boolean = true): EventManager = EventManager(ComponentSet.of(), defaultParameterInjection)
+fun EventManager(): EventManager = EventManager(ComponentSet.of())
 
-fun EventManager(components: EventManagerComponent<*>, defaultParameterInjection: Boolean = true): EventManager {
+fun EventManager(components: EventManagerComponent<*>): EventManager {
     val component = components.addIfAbsent(ExceptionHandler.Empty)
-    return DefaultEventManager(component, defaultParameterInjection)
+    return DefaultEventManager(component)
 }
