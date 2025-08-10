@@ -2,6 +2,6 @@ package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.manager.internal.HandlerEventScopeImpl
 
-fun HandlerEventScope(eventManager: EventManager): HandlerEventScope = HandlerEventScopeImpl(eventManager)
+fun HandlerEventScope(parent: HandlerEventScope): HandlerEventScope = HandlerEventScopeImpl(parent)
 
-fun EventManager.newScope(): HandlerEventScope = HandlerEventScopeImpl(this)
+fun HandlerEventScope.newScope(): HandlerEventScope = HandlerEventScopeImpl(this)
