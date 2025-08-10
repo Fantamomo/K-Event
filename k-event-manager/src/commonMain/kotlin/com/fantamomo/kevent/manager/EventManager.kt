@@ -70,7 +70,7 @@ interface EventManager {
         event: KClass<E>,
         configuration: EventConfiguration<E> = EventConfiguration.default(),
         handler: (E) -> Unit,
-    )
+    ): RegisteredLambdaHandler
 
     fun unregister(listener: Listener)
 }
