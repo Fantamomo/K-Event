@@ -146,7 +146,7 @@ class DefaultEventManager internal constructor(
         event: KClass<E>,
         configuration: EventConfiguration<E>,
         handler: (E) -> Unit,
-    ) {
+    ): RegisteredLambdaHandler {
         val listener = RegisteredFunctionListener(
             type = event,
             listener = null,
@@ -154,6 +154,10 @@ class DefaultEventManager internal constructor(
             configuration = configuration
         )
         getOrCreateHandlerList(event).add(listener)
+        return RegisteredLambdaHandler {
+            @Suppress("UNCHECKED_CAST")
+            (handlers.get(event) as? HandlerList<E>)?.remove(listener)
+        }
     }
 
     override fun unregister(listener: Listener) {
@@ -286,6 +290,10 @@ class DefaultEventManager internal constructor(
                 dirty = false
                 return sortedListeners
             }
+        }
+
+        fun remove(listener: RegisteredFunctionListener<E>) {
+            listeners.remove(listener)
         }
     }
 
