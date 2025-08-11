@@ -2,14 +2,13 @@ package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.*
 import com.fantamomo.kevent.manager.components.*
+import com.fantamomo.kevent.manager.internal.InternalLoggerInjection
+import com.fantamomo.kevent.manager.internal.concurrentMap
+import com.fantamomo.kevent.manager.internal.unbox
 import com.fantamomo.kevent.manager.settings.Settings
 import com.fantamomo.kevent.manager.settings.getSetting
 import com.fantamomo.kevent.utils.InjectionName
 import kotlinx.coroutines.*
-import java.lang.reflect.InvocationTargetException
-import java.util.concurrent.ConcurrentHashMap
-import java.util.logging.Level
-import java.util.logging.Logger
 import kotlin.reflect.*
 import kotlin.reflect.full.*
 import kotlin.reflect.jvm.isAccessible
@@ -19,8 +18,7 @@ class DefaultEventManager internal constructor(
     components: EventManagerComponent<*>
 ) : EventManager {
 
-    private val handlers: ConcurrentHashMap<KClass<out Dispatchable>, HandlerList<out Dispatchable>> =
-        ConcurrentHashMap()
+    private val handlers: Map<KClass<out Dispatchable>, HandlerList<out Dispatchable>> = concurrentMap()
 
     private val exceptionHandler = components.getOrThrow(ExceptionHandler)
 
@@ -39,11 +37,10 @@ class DefaultEventManager internal constructor(
             this
         )
 
-        if (!components.getSetting(Settings.DISABLE_LOGGER_INJECTION)) ListenerParameterResolver.static(
-            "logger",
-            Logger::class,
-            logger
-        )
+        if (InternalLoggerInjection.isActive(components)) {
+            components += InternalLoggerInjection.inject()
+        }
+
         if (!components.getSetting(Settings.DISABLE_SCOPE_INJECTION)) ListenerParameterResolver.static(
             "scope",
             CoroutineScope::class,
@@ -105,8 +102,8 @@ class DefaultEventManager internal constructor(
             try {
                 method.isAccessible = true
                 method.callBy(arguments)
-            } catch (e: InvocationTargetException) {
-                val config = (e.targetException as? ConfigurationCapturedException)?.configuration
+            } catch (e: Throwable) {
+                val config = (e.unbox() as? ConfigurationCapturedException)?.configuration
                 if (config !is EventConfiguration<*>) continue
 
                 @Suppress("UNCHECKED_CAST")
@@ -119,8 +116,6 @@ class DefaultEventManager internal constructor(
                 )
 
                 getOrCreateHandlerList(typedEventClass).add(handler)
-            } catch (_: Throwable) {
-                // Silent fail
             }
         }
     }
@@ -440,10 +435,6 @@ class DefaultEventManager internal constructor(
                         }
                     }.all { it }
         }
-    }
-
-    companion object {
-        private val logger = Logger.getLogger(DefaultEventManager::class.jvmName)
     }
 
     private sealed interface InternalParameterResolver<T : Any> : ListenerParameterResolver<T> {
