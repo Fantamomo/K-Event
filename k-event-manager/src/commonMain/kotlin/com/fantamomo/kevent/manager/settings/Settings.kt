@@ -33,14 +33,6 @@ object Settings {
      * `true` will turn off this behavior.
      */
     val DISABLE_SCOPE_INJECTION by setting(false)
-    /**
-     * A setting that disables the injection of the `logger:` [java.util.logging.Logger] state into parameter resolution during
-     * event dispatching.
-     *
-     * By default, the value is `false`, meaning the `scope` injection is enabled. Setting this to
-     * `true` will turn off this behavior.
-     */
-    val DISABLE_LOGGER_INJECTION by setting(false)
 
 
     private inline fun <reified T> setting(name: String, defaultValue: T) = SettingsEntry<T>(name, defaultValue)
