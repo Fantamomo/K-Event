@@ -14,9 +14,10 @@ import kotlin.reflect.*
 import kotlin.reflect.full.*
 import kotlin.reflect.jvm.isAccessible
 import kotlin.reflect.jvm.jvmName
+import kotlin.time.Duration.Companion.milliseconds
 
 class DefaultEventManager internal constructor(
-    components: EventManagerComponent<*>
+    components: EventManagerComponent<*>,
 ) : EventManager {
 
     private val handlers: ConcurrentHashMap<KClass<out Dispatchable>, HandlerList<out Dispatchable>> =
@@ -55,9 +56,75 @@ class DefaultEventManager internal constructor(
         parameterResolver = components.getAll(ListenerParameterResolver.Key)
     }
 
+    private fun existListener(clazz: KClass<out Listener>) = handlers.any { it.value.existListener(clazz) }
+
+    private fun findAllListeners(clazz: KClass<out Listener>): List<RegisteredKFunctionListener<*>> {
+        return handlers.values.flatMap { it.findAllListeners(clazz) }
+    }
+
+    private fun registerRegisteredListener(listenerClass: KClass<out Listener>, listener: Listener) {
+        val listeners = findAllListeners(listenerClass)
+        out@ for (registered in listeners) {
+            @Suppress("UNCHECKED_CAST")
+            registered as RegisteredKFunctionListener<Dispatchable>
+            var newConfiguration: EventConfiguration<Dispatchable>? = null
+
+            if (!registered.kFunction.parameters[1].type.isMarkedNullable) {
+                newConfiguration = EventConfiguration.default()
+            } else {
+                val arguments = mapOf(
+                    registered.thisParameter to listener,
+                    registered.eventParameter to null
+                ) + registered.resolvers.mapValues { it.value.valueByConfiguration }
+                val method = registered.kFunction
+                try {
+                    if (method.isSuspend) {
+                        var exception: InvocationTargetException? = null
+                        runBlocking {
+                            withTimeout(2.milliseconds) {
+                                try {
+                                    method.callSuspendBy(arguments)
+                                } catch (e: InvocationTargetException) {
+                                    exception = e
+                                }
+                            }
+                        }
+                        if (exception != null) throw exception
+                    } else {
+                        method.callBy(arguments)
+                    }
+                } catch (e: InvocationTargetException) {
+                    val config = (e.targetException as? ConfigurationCapturedException)?.configuration
+                    if (config !is EventConfiguration<*>) continue@out
+                    @Suppress("UNCHECKED_CAST")
+                    newConfiguration = config as EventConfiguration<Dispatchable>
+                } catch (_: Throwable) {
+                    // Silent fail
+                    continue@out
+                }
+            }
+            if (newConfiguration == null) continue@out
+
+            val new = RegisteredKFunctionListener(
+                registered.type,
+                listener,
+                registered.kFunction,
+                newConfiguration,
+                registered.resolvers
+            )
+            getOrCreateHandlerList(registered.type).add(new)
+        }
+    }
+
     override fun register(listener: Listener) {
         checkClosed()
         val listenerClass = listener::class
+
+        if (existListener(listenerClass)) {
+            registerRegisteredListener(listenerClass, listener)
+            return
+        }
+
         out@ for (method in listenerClass.declaredMemberFunctions) {
             if (!method.hasAnnotation<Register>()) continue
             if (method.visibility != KVisibility.PUBLIC) continue
@@ -104,7 +171,22 @@ class DefaultEventManager internal constructor(
 
             try {
                 method.isAccessible = true
-                method.callBy(arguments)
+
+                if (method.isSuspend) {
+                    var exception: InvocationTargetException? = null
+                    runBlocking {
+                        withTimeout(2.milliseconds) {
+                            try {
+                                method.callSuspendBy(arguments)
+                            } catch (e: InvocationTargetException) {
+                                exception = e
+                            }
+                        }
+                    }
+                    if (exception != null) throw exception
+                } else {
+                    method.callBy(arguments)
+                }
             } catch (e: InvocationTargetException) {
                 val config = (e.targetException as? ConfigurationCapturedException)?.configuration
                 if (config !is EventConfiguration<*>) continue
@@ -127,6 +209,7 @@ class DefaultEventManager internal constructor(
 
     override fun dispatch(event: Dispatchable) {
         checkClosed()
+        if (handlers.isEmpty()) return
         val eventClass = event::class
         var called = false
         val genericTypes = (event as? GenericTypedEvent)?.extractGenericTypes() ?: listOf()
@@ -330,6 +413,21 @@ class DefaultEventManager internal constructor(
             sortedListeners = emptyList()
             dirty = false
         }
+
+        fun existListener(clazz: KClass<out Listener>) =
+            listeners.any { it.listener?.let { listener -> listener::class == clazz } ?: false }
+
+        @Suppress("UNCHECKED_CAST")
+        fun findAllListeners(clazz: KClass<out Listener>): List<RegisteredKFunctionListener<*>> {
+            var listener: Listener? = null
+            return listeners.filter { registeredListener ->
+                registeredListener.listener?.let {
+                    if (it::class != clazz) return@filter true
+                    if (listener == null) listener = it
+                    it === listener
+                } ?: false
+            } as List<RegisteredKFunctionListener<*>>
+        }
     }
 
     private sealed class RegisteredListener<E : Dispatchable>(
@@ -385,8 +483,8 @@ class DefaultEventManager internal constructor(
         configuration: EventConfiguration<E>,
         val resolvers: Map<KParameter, ListenerParameterResolver<*>>,
     ) : RegisteredListener<E>(type, listener, configuration) {
-        private val thisParameter = kFunction.parameters[0]
-        private val eventParameter = kFunction.parameters[1]
+        val thisParameter = kFunction.parameters[0]
+        val eventParameter = kFunction.parameters[1]
         val actualType = eventParameter.type
         val typeArguments by lazy { actualType.arguments }
         override val isSuspend: Boolean = kFunction.isSuspend
