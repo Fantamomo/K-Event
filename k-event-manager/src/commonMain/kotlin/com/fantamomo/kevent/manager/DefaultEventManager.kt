@@ -469,14 +469,14 @@ class DefaultEventManager internal constructor(
         protected var isCurrentlyCalled: Boolean = false
     }
 
-    private inner class RegisteredFunctionListener<E : Dispatchable>(
+    private class RegisteredFunctionListener<E : Dispatchable>(
         type: KClass<E>,
         listener: Listener?,
         override val method: (E) -> Unit,
         configuration: EventConfiguration<E>,
     ) : RegisteredListener<E>(type, listener, configuration)
 
-    private inner class RegisteredKFunctionListener<E : Dispatchable>(
+    private class RegisteredKFunctionListener<E : Dispatchable>(
         type: KClass<E>,
         override val listener: Listener,
         val kFunction: KFunction<*>,
@@ -529,7 +529,7 @@ class DefaultEventManager internal constructor(
                     typeArguments.mapIndexed { index, projection ->
                         if (projection.variance == null) return@mapIndexed true
                         val type = projection.type?.classifier as? KClass<*> ?: return@mapIndexed false
-                        @Suppress("KotlinConstantConditions")
+                        @Suppress("SENSELESS_NULL_IN_WHEN")
                         when (projection.variance) {
                             KVariance.INVARIANT -> type == types[index]
                             KVariance.IN -> types[index].isSuperclassOf(type)
