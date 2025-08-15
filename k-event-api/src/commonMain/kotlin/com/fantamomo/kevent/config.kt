@@ -85,6 +85,17 @@ inline fun <E : Dispatchable> configuration(event: E?, @EventDsl block: EventCon
  *     println(event.someProperty)
  * }
  * ```
+ *
+ * The next example does the same as above:
+ * ```
+ * @Register
+ * fun onMyEvent(event: MyEvent?) {
+ *
+ *     println(event.someProperty)
+ * }
+ * ```
+ *
+ * You can remove the `emptyConfiguration` call when you make the parameter non-null.
  * 
  * @param event The event being handled, which may be null during initialization
  * @throws ConfigurationCapturedException during initialization to pass default configuration data
