@@ -153,7 +153,7 @@ class DefaultEventManager internal constructor(
         }
 
         if (!called && eventClass != DeadEvent::class) {
-            dispatch(DeadEvent(event))
+            dispatchSuspend(DeadEvent(event))
         }
     }
 
