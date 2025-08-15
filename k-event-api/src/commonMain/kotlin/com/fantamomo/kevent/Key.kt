@@ -82,6 +82,21 @@ data class Key<T>(val key: String, val type: KClass<T & Any>, val defaultValue: 
         val EXCLUSIVE_LISTENER_PROCESSING = Key<Boolean>("exclusiveListenerProcessing", false)
 
         /**
+         * Built-in key that marks a listener as "silent".
+         *
+         * A silent listener will **not** be considered an active handler for the purpose of
+         * suppressing [DeadEvent] dispatches.
+         * In other words: if an event has only silent listeners registered, it will still
+         * be treated as "unhandled" and a [DeadEvent] will be dispatched.
+         *
+         * This is useful for listeners that only observe or log events without
+         * taking part in main processing logic.
+         *
+         * @see com.fantamomo.kevent.silent
+         */
+        val SILENT = Key<Boolean>("silent", false)
+
+        /**
          * Represents a debug-only key with a name identifier.
          *
          * This key's primary purpose is to serve debugging operations within the system,
