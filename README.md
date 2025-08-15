@@ -424,7 +424,7 @@ class MyListener : Listener {
 ```
 
 The `DefaultEventManager` **can not** check the generic type at runtime.
-In this case both of the listeners will be called when a event like `MyGenericEvent<Int>` is called.
+In this case both of the listeners will be called when an event like `MyGenericEvent<Int>` is called.
 That is a problem because in `onMyEventString` we want the event with `String` but get it with `Int`.
 
 K-Event adds two new interfaces `GenericTypedEvent` and `SingleGenericTypedEvent`.
@@ -461,7 +461,7 @@ only `onMyEvent` is called.
 The default function for creating a `DefaultEventManager` is `EventManager`, but there is more.
 
 The `EventManager` function takes Components, for example the default manager will ignore errors thrown in listeners,
-if you want to log this errors you can use a `ExceptionHandler`.
+if you want to log these errors, you can use a `ExceptionHandler`.
 
 ```kotlin
 object SysOutExceptionHandler : ExceptionHandler() {

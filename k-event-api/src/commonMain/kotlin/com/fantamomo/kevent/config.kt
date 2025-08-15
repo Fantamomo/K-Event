@@ -21,7 +21,7 @@ import kotlin.jvm.JvmSynthetic
  * 
  * The function uses Kotlin contracts to inform the compiler that if this function
  * returns normally (without throwing an exception), then `event` is guaranteed to be
- * non-null in the subsequent code.
+ * non-null in the following code.
  * 
  * Example usage:
  * ```

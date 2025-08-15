@@ -7,7 +7,7 @@ package com.fantamomo.kevent
  * compiler enforce proper scoping rules for the DSL. It prevents implicit access to
  * outer receiver scopes, making the DSL safer and more predictable.
  *
- * When a function parameter is marked with this annotation (like the [block] parameter
+ * When a function parameter is marked with this annotation (like the `block` parameter
  * in the [configuration] function), the Kotlin compiler ensures that within that block,
  * only members of the immediate receiver are accessible without explicit qualification.
  *
