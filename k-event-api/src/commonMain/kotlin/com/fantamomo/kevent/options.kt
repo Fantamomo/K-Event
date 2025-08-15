@@ -63,6 +63,36 @@ var EventConfigurationScope<*>.exclusiveListenerProcessing: Boolean
     set(value) = set(Key.EXCLUSIVE_LISTENER_PROCESSING, value)
 
 /**
+ * Marks whether a listener is considered "silent".
+ *
+ * When `true`, the listener will not prevent a [DeadEvent] from being dispatched
+ * if it is the only listener for a given event. This allows passive observers,
+ * loggers, or debug tools to listen to all events without affecting the system's
+ * perception of whether an event was handled.
+ *
+ * Example:
+ * ```
+ * @Register
+ * fun logDeadEvent(event: DeadEvent<*>?) {
+ *     configuration(event) {
+ *         silent = true
+ *     }
+ *     println("Dead event: ${event?.event}")
+ * }
+ * ```
+ *
+ * Default is `false`, meaning the listener is active and will count as handling
+ * the event for [DeadEvent] suppression.
+ *
+ * @author Fantamomo
+ * @since 1.0-SNAPSHOT
+ * @see Key.SILENT
+ */
+var EventConfigurationScope<*>.silent: Boolean
+    get() = getOrDefault(Key.SILENT)
+    set(value) = set(Key.SILENT, value)
+
+/**
  * Use to set the name of a Listener.
  *
  * It may potentially be used by other systems in the future for further expansion

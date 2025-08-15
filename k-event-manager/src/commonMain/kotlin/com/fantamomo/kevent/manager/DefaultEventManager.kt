@@ -339,7 +339,7 @@ class DefaultEventManager internal constructor(
                         genericTypes
                     )
                 ) continue
-                called = true
+                called = called || !handler.configuration.getOrDefault(Key.SILENT)
                 if (handler.isSuspend) {
                     scope.launch(Dispatchers.Unconfined) {
                         try {
@@ -377,13 +377,13 @@ class DefaultEventManager internal constructor(
                         genericTypes
                     )
                 ) continue
+                called = called || !handler.configuration.getOrDefault(Key.SILENT)
                 try {
                     if (handler.isSuspend) {
                         handler.invokeSuspend(event, true)
                     } else {
                         handler.invoke(typedEvent)
                     }
-                    called = true
                 } catch (e: Throwable) {
                     @Suppress("UNCHECKED_CAST")
                     handleException(e, handler)
