@@ -74,7 +74,7 @@ interface ListenerParameterResolver<T : Any> : EventManagerComponent<ListenerPar
             valueByConfiguration: T,
             valueProvider: () -> T,
         ): ListenerParameterResolver<T> =
-            DynamicListenerParameterResolver(name, type, valueByConfiguration, { _, _, _ -> valueProvider() })
+            DynamicListenerParameterResolver(name, type, valueByConfiguration) { _, _, _ -> valueProvider() }
 
         fun <T : Any> static(
             name: String,

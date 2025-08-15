@@ -255,7 +255,7 @@ class DefaultEventManager internal constructor(
         getOrCreateHandlerList(event).add(listener)
         return RegisteredLambdaHandler {
             @Suppress("UNCHECKED_CAST")
-            (handlers.get(event) as? HandlerList<E>)?.remove(listener)
+            (handlers[event] as? HandlerList<E>)?.remove(listener)
         }
     }
 

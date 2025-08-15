@@ -126,7 +126,7 @@ sealed interface Priority : Comparable<Priority> {
                 "LOW" -> LOW
                 "LOWEST" -> LOWEST
                 "MONITOR" -> MONITOR
-                else -> throw IllegalArgumentException("No object com.fantamomo.kevent.Priority.Standard.$value")
+                else -> throw IllegalArgumentException("No object ${Standard::class.qualifiedName}.$value")
             }
         }
     }
