@@ -285,14 +285,19 @@ class DefaultEventManager internal constructor(
                 listener.listener,
                 (listener as? RegisteredKFunctionListener<*>)?.kFunction
             )
-        } catch (newException: Throwable) {
-            // if the handler threw an exception... well, log it
-            logger.log(Level.SEVERE, "The handler which should handle a exception threw an exception", newException)
-            val message = "The original exception was (" + when (listener) {
+        } catch (handlerException: Throwable) {
+            logger.log(
+                Level.SEVERE,
+                "Exception-Handler failed while handling an exception",
+                handlerException
+            )
+
+            val listenerDescription = when (listener) {
                 is RegisteredFunctionListener<*> -> "lambda: ${listener.method::class.jvmName}"
                 is RegisteredKFunctionListener<*> -> "from: ${listener.listener::class.jvmName}#${listener.kFunction.name}"
-            } + "):"
-            logger.log(Level.SEVERE, message, e)
+            }
+
+            logger.log(Level.SEVERE, "Original exception was ($listenerDescription):", e)
         }
     }
 
