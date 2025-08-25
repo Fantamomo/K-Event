@@ -9,6 +9,22 @@ import java.util.concurrent.ConcurrentLinkedDeque
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
+/**
+ * [EventRecorderImpl] is an implementation of the [EventRecorder] interface.
+ * It is used to record and manage events in an application, with various options
+ * for filtering and managing recorded events.
+ *
+ * The class internally uses a concurrent deque to store the recorded events
+ * and provides thread-safe operations for event handling. It supports filtering
+ * events by type, thread, and time range, as well as additional configuration
+ * options for managing how events are recorded.
+ *
+ * @property options The configuration options for the event recorder, such as
+ *                   maximum event storage, recording manager/dispatcher information, and enabling/disabling recording.
+ * @constructor Creates an instance of [EventRecorderImpl] with the given options.
+ * @author Fantamomo
+ * @since 1.0-SNAPSHOT
+ */
 @OptIn(ExperimentalTime::class)
 class EventRecorderImpl(private val options: EventRecorderOptions = EventRecorderOptions()) : EventRecorder {
 
@@ -20,10 +36,21 @@ class EventRecorderImpl(private val options: EventRecorderOptions = EventRecorde
 
     private val stackWalker = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE)
 
+    /**
+     * Handles any dispatchable event, capturing event information and recording it if enabled.
+     *
+     * This method should never be called directly; it is intended to be invoked exclusively
+     * through the EventManager system. It processes an event, applies configurations, and
+     * ensures compatibility with various filters (like type and thread filters). If configured,
+     * debugging information such as the dispatcher's and manager's class/method names will also
+     * be recorded.
+     *
+     * @param event The dispatchable event to be handled. It can be null during configuration phases.
+     */
     @Register
     fun onAnyEvent(event: Dispatchable?) {
         configuration(event) {
-            silent = true
+            silent = true // Prevent interfering with `DeadEvents`
         }
 
         if (!enabled) return
