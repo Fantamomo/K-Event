@@ -335,7 +335,7 @@ class DefaultEventManager internal constructor(
                 if (handler.configuration.getOrDefault(Key.DISALLOW_SUBTYPES)) {
                     if (typedEvent::class != handler.type) continue
                 }
-                if (genericTypes.isNotEmpty() && handler is RegisteredKFunctionListener<E> && !handler.allowGenericsTypes(
+                if (event::class == handler.type && genericTypes.isNotEmpty() && handler is RegisteredKFunctionListener<E> && !handler.allowGenericsTypes(
                         genericTypes
                     )
                 ) continue
@@ -373,7 +373,7 @@ class DefaultEventManager internal constructor(
                 if (handler.configuration.getOrDefault(Key.DISALLOW_SUBTYPES)) {
                     if (typedEvent::class != handler.type) continue
                 }
-                if (genericTypes.isNotEmpty() && handler is RegisteredKFunctionListener<E> && !handler.allowGenericsTypes(
+                if (event::class == handler.type && genericTypes.isNotEmpty() && handler is RegisteredKFunctionListener<E> && !handler.allowGenericsTypes(
                         genericTypes
                     )
                 ) continue
