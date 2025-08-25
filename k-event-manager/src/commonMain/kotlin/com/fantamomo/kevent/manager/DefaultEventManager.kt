@@ -10,6 +10,9 @@ import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
 import java.util.logging.Logger
+import kotlin.contracts.ExperimentalContracts
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
 import kotlin.reflect.*
 import kotlin.reflect.full.*
 import kotlin.reflect.jvm.isAccessible
@@ -127,10 +130,16 @@ class DefaultEventManager internal constructor(
 
         out@ for (method in listenerClass.declaredMemberFunctions) {
             if (!method.hasAnnotation<Register>()) continue
-            if (method.visibility != KVisibility.PUBLIC) continue
+            if (method.visibility != KVisibility.PUBLIC) {
+                exceptionHandler("onMethodNotPublic") { onMethodNotPublic(listener, method, method.visibility) }
+                continue@out
+            }
 
             val parameters = method.parameters
-            if (parameters.size < 2) continue
+            if (parameters.size < 2) {
+                exceptionHandler("onMethodHasNoParameters") { onMethodHasNoParameters(listener, method) }
+                continue@out
+            }
 
             val resolvers = parameters.dropWhile { it.index < 2 }.associateWith { parameter ->
                 parameterResolver.find {
@@ -141,7 +150,10 @@ class DefaultEventManager internal constructor(
             }
 
             val eventClass = parameters[1].type.classifier as? KClass<*> ?: continue
-            if (!Dispatchable::class.isSuperclassOf(eventClass)) continue
+            if (!Dispatchable::class.isSuperclassOf(eventClass)) {
+                exceptionHandler("onMethodHasNoDispatchableParameter") { onMethodHasNoDispatchableParameter(listener, method, parameters[1].type) }
+                continue@out
+            }
 
             @Suppress("UNCHECKED_CAST")
             val typedEventClass = eventClass as KClass<Dispatchable>
@@ -155,6 +167,7 @@ class DefaultEventManager internal constructor(
                 try {
                     method.isAccessible = true
                 } catch (_: Throwable) {
+                    exceptionHandler("onMethodNotAccessible") { onMethodNotAccessible(listener, method) }
                     continue
                 }
                 val handler = RegisteredKFunctionListener(
@@ -178,6 +191,7 @@ class DefaultEventManager internal constructor(
                         withTimeout(2.milliseconds) {
                             try {
                                 method.callSuspendBy(arguments)
+                                exceptionHandler("onMethodDidNotThrowConfiguredException") { onMethodDidNotThrowConfiguredException(listener, method) }
                             } catch (e: InvocationTargetException) {
                                 exception = e
                             }
@@ -186,10 +200,14 @@ class DefaultEventManager internal constructor(
                     if (exception != null) throw exception
                 } else {
                     method.callBy(arguments)
+                    exceptionHandler("onMethodDidNotThrowConfiguredException") { onMethodDidNotThrowConfiguredException(listener, method) }
                 }
             } catch (e: InvocationTargetException) {
                 val config = (e.targetException as? ConfigurationCapturedException)?.configuration
-                if (config !is EventConfiguration<*>) continue
+                if (config !is EventConfiguration<*>) {
+                    exceptionHandler("onMethodThrewUnexpectedException") { onMethodThrewUnexpectedException(listener, method, e.targetException) }
+                    continue@out
+                }
 
                 @Suppress("UNCHECKED_CAST")
                 val handler = RegisteredKFunctionListener(
@@ -201,8 +219,8 @@ class DefaultEventManager internal constructor(
                 )
 
                 getOrCreateHandlerList(typedEventClass).add(handler)
-            } catch (_: Throwable) {
-                // Silent fail
+            } catch (e: Throwable) {
+                exceptionHandler("onUnexpectedExceptionDuringRegistration") { onUnexpectedExceptionDuringRegistration(listener, method, e) }
             }
         }
     }
@@ -285,14 +303,34 @@ class DefaultEventManager internal constructor(
                 listener.listener,
                 (listener as? RegisteredKFunctionListener<*>)?.kFunction
             )
-        } catch (newException: Throwable) {
-            // if the handler threw an exception... well, log it
-            logger.log(Level.SEVERE, "The handler which should handle a exception threw an exception", newException)
-            val message = "The original exception was (" + when (listener) {
+        } catch (handlerException: Throwable) {
+            logger.log(
+                Level.SEVERE,
+                "Exception-Handler failed while handling an exception",
+                handlerException
+            )
+
+            val listenerDescription = when (listener) {
                 is RegisteredFunctionListener<*> -> "lambda: ${listener.method::class.jvmName}"
                 is RegisteredKFunctionListener<*> -> "from: ${listener.listener::class.jvmName}#${listener.kFunction.name}"
-            } + "):"
-            logger.log(Level.SEVERE, message, e)
+            }
+
+            logger.log(Level.SEVERE, "Original exception was ($listenerDescription):", e)
+        }
+    }
+
+    @Suppress("WRONG_INVOCATION_KIND")
+    @OptIn(ExperimentalContracts::class)
+    private fun exceptionHandler(methodName: String, block: ExceptionHandler.() -> Unit) {
+        contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
+        try {
+            exceptionHandler.block()
+        } catch (e: Throwable) {
+            logger.log(
+                Level.WARNING,
+                "Method '$methodName' in ${exceptionHandler::class.jvmName} threw an exception.",
+                e
+            )
         }
     }
 
