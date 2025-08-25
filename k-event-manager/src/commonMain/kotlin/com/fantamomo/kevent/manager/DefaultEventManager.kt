@@ -19,6 +19,13 @@ import kotlin.reflect.jvm.isAccessible
 import kotlin.reflect.jvm.jvmName
 import kotlin.time.Duration.Companion.milliseconds
 
+/**
+ * Default implementation of the EventManager interface for managing event listeners
+ * and dispatching events.
+ *
+ * @author Fantamomo
+ * @since 1.0-SNAPSHOT
+ */
 class DefaultEventManager internal constructor(
     components: EventManagerComponent<*>,
 ) : EventManager {
