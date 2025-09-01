@@ -452,7 +452,13 @@ class MyListener : Listener {
 ```
 
 With `SingleGenericTypedEvent` the event manager **can** check the type at runtime and when `MyGenericEvent<Int>` is dispatched,
-only `onMyEvent` is called. 
+only `onMyEvent` is called.
+
+> **Warning:**  
+> If an event is generic **and** inherits from another generic event, and you listen to the parent event while a child event is fired,  
+> the event manager currently **cannot** verify the generic type in this inheritance case.  
+> This means the listener for the parent event might still be called even if the generic type does not match.  
+> A solution for this is being worked on.
 
 ---
 
