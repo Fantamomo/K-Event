@@ -138,6 +138,7 @@ configuration(event) {
 * `exclusiveListenerProcessing`: Prevents this handler from running concurrently. 
 This applies per EventManager instance — multiple managers may still invoke the handler concurrently.
 * `name`: Optional debug label for this method.
+* `silent`: If `true`, the handler will not prevent `DeadEvent` from being emitted.
 
 The configuration is stored inside the manager’s registry and used every time this event is dispatched.
 
