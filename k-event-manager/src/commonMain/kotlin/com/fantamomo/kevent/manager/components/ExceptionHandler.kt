@@ -42,7 +42,7 @@ abstract class ExceptionHandler : EventManagerComponent<ExceptionHandler> {
      * @param visibility The visibility level of the method, indicating why it may
      *                   not be accessible. Can be null if the visibility is unknown.
      */
-    fun onMethodNotPublic(listener: Listener, method: KFunction<*>, visibility: KVisibility?) {}
+    open fun onMethodNotPublic(listener: Listener, method: KFunction<*>, visibility: KVisibility?) {}
 
     /**
      * Invoked when a listener method has no parameters. This function handles cases
@@ -53,7 +53,7 @@ abstract class ExceptionHandler : EventManagerComponent<ExceptionHandler> {
      *                 about the listener being processed.
      * @param method The method within the listener that has no parameters.
      */
-    fun onMethodHasNoParameters(listener: Listener, method: KFunction<*>) {}
+    open fun onMethodHasNoParameters(listener: Listener, method: KFunction<*>) {}
 
     /**
      * Invoked when the first parameter of a method in a listener does not extends [com.fantamomo.kevent.Dispatchable].
@@ -65,7 +65,7 @@ abstract class ExceptionHandler : EventManagerComponent<ExceptionHandler> {
      * @param method The method within the listener that cannot be dispatched due to its parameter(s).
      * @param type The type information of parameters that are expected to be dispatchable but are not.
      */
-    fun onMethodHasNoDispatchableParameter(listener: Listener, method: KFunction<*>, type: KType) {}
+    open fun onMethodHasNoDispatchableParameter(listener: Listener, method: KFunction<*>, type: KType) {}
 
     /**
      * Called when setting `method.isAccessible = true` throws an exception.
@@ -77,7 +77,7 @@ abstract class ExceptionHandler : EventManagerComponent<ExceptionHandler> {
      *                 Provides context for identifying the source of the problem.
      * @param method The method that failed to change its accessibility.
      */
-    fun onMethodNotAccessible(listener: Listener, method: KFunction<*>) {}
+    open fun onMethodNotAccessible(listener: Listener, method: KFunction<*>) {}
 
     /**
      * Invoked when a method in a listener throws an exception during registration,
@@ -93,7 +93,7 @@ abstract class ExceptionHandler : EventManagerComponent<ExceptionHandler> {
      * @param exception The `Throwable` instance representing the unexpected exception
      *                  that occurred during method registration.
      */
-    fun onMethodThrewUnexpectedException(listener: Listener, method: KFunction<*>, exception: Throwable) {}
+    open fun onMethodThrewUnexpectedException(listener: Listener, method: KFunction<*>, exception: Throwable) {}
 
     /**
      * Invoked when an unexpected exception occurs during the registration of a listener method.
@@ -106,7 +106,7 @@ abstract class ExceptionHandler : EventManagerComponent<ExceptionHandler> {
      * @param exception The `Throwable` instance representing the unexpected exception
      *                  that occurred during the registration process.
      */
-    fun onUnexpectedExceptionDuringRegistration(listener: Listener, method: KFunction<*>, exception: Throwable) {}
+    open fun onUnexpectedExceptionDuringRegistration(listener: Listener, method: KFunction<*>, exception: Throwable) {}
 
     /**
      * Invoked when a listener method expected to throw a [com.fantamomo.kevent.ConfigurationCapturedException] does not throw any exception.
@@ -114,7 +114,7 @@ abstract class ExceptionHandler : EventManagerComponent<ExceptionHandler> {
      * @param listener The listener instance containing the method that did not throw the expected exception.
      * @param method The method in the listener that was expected to throw a ConfigurationCapturedException but did not.
      */
-    fun onMethodDidNotThrowConfiguredException(listener: Listener, method: KFunction<*>) {}
+    open fun onMethodDidNotThrowConfiguredException(listener: Listener, method: KFunction<*>) {}
 
     /**
      * Provides a no-operation implementation of the exception handler.
