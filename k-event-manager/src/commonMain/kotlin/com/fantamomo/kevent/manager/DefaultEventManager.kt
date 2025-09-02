@@ -42,6 +42,8 @@ class DefaultEventManager internal constructor(
 
     private var isClosed = false
 
+    private val dispatchDeadEvents = components.getSetting(Settings.DISPATCH_DEAD_EVENTS)
+
     init {
         var components = components
         if (!components.getSetting(Settings.DISABLE_EVENTMANAGER_INJECTION)) components += ListenerParameterResolver.static(
@@ -244,7 +246,7 @@ class DefaultEventManager internal constructor(
             called = called or handlerList.call(event, genericTypes)
         }
 
-        if (!called && eventClass != DeadEvent::class) {
+        if (dispatchDeadEvents && !called && eventClass != DeadEvent::class) {
             dispatch(DeadEvent(event))
         }
     }
@@ -260,7 +262,7 @@ class DefaultEventManager internal constructor(
             called = called or handlerList.callSuspend(event, genericTypes)
         }
 
-        if (!called && eventClass != DeadEvent::class) {
+        if (dispatchDeadEvents && !called && eventClass != DeadEvent::class) {
             dispatchSuspend(DeadEvent(event))
         }
     }
