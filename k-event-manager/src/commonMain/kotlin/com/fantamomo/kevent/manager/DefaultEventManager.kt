@@ -393,11 +393,13 @@ class DefaultEventManager internal constructor(
                         genericTypes
                     )
                 ) continue
-                called = called || !handler.configuration.getOrDefault(Key.SILENT)
+                val silent = handler.configuration.getOrDefault(Key.SILENT)
                 if (handler.isSuspend) {
                     scope.launch(Dispatchers.Unconfined) {
                         try {
-                            handler.invokeSuspend(typedEvent, false)
+                            if (handler.invokeSuspend(typedEvent, false) && !silent) {
+                                called = true
+                            }
                         } catch (e: Throwable) {
                             @Suppress("UNCHECKED_CAST")
                             handleException(e, handler)
@@ -405,7 +407,9 @@ class DefaultEventManager internal constructor(
                     }
                 } else {
                     try {
-                        handler(typedEvent)
+                        if (handler(typedEvent) && !silent) {
+                            called = true
+                        }
                     } catch (e: Throwable) {
                         @Suppress("UNCHECKED_CAST")
                         handleException(e, handler)
@@ -431,12 +435,15 @@ class DefaultEventManager internal constructor(
                         genericTypes
                     )
                 ) continue
-                called = called || !handler.configuration.getOrDefault(Key.SILENT)
+                val silent = handler.configuration.getOrDefault(Key.SILENT)
                 try {
-                    if (handler.isSuspend) {
+                    val success = if (handler.isSuspend) {
                         handler.invokeSuspend(event, true)
                     } else {
                         handler.invoke(typedEvent)
+                    }
+                    if (success && !silent) {
+                        called = true
                     }
                 } catch (e: Throwable) {
                     @Suppress("UNCHECKED_CAST")
@@ -496,26 +503,28 @@ class DefaultEventManager internal constructor(
 
         abstract val handlerId: String
 
-        operator fun invoke(event: E) {
+        operator fun invoke(event: E): Boolean {
             if (configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)) {
-                if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return
+                if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return false
             }
             try {
                 method(event)
             } finally {
                 manager.sharedExclusiveExecution.release(handlerId)
             }
+            return true
         }
 
-        suspend fun invokeSuspend(event: E, isWaiting: Boolean) {
+        suspend fun invokeSuspend(event: E, isWaiting: Boolean): Boolean {
             if (configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)) {
-                if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return
+                if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return false
             }
             try {
                 invokeSuspendInternal(event, isWaiting)
             } finally {
                 manager.sharedExclusiveExecution.release(handlerId)
             }
+            return true
         }
 
         protected open suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {}
