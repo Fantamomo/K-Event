@@ -2,10 +2,7 @@
 
 package com.fantamomo.kevent.manager
 
-import com.fantamomo.kevent.manager.components.ComponentSet
-import com.fantamomo.kevent.manager.components.EventManagerComponent
-import com.fantamomo.kevent.manager.components.ExceptionHandler
-import com.fantamomo.kevent.manager.components.addIfAbsent
+import com.fantamomo.kevent.manager.components.*
 
 /**
  * Creates a default instance of [EventManager] with a predefined empty component set.
@@ -34,6 +31,8 @@ fun EventManager(): EventManager = EventManager(ComponentSet.of())
  * @since 1.0-SNAPSHOT
  */
 fun EventManager(components: EventManagerComponent<*>): EventManager {
-    val component = components.addIfAbsent(ExceptionHandler.Empty)
+    val component = components
+        .addIfAbsent(ExceptionHandler.Empty)
+        .addIfAbsent(SharedExclusiveExecution())
     return DefaultEventManager(component)
 }
