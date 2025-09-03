@@ -23,8 +23,8 @@ import kotlin.reflect.KClass
  */
 class HandlerEventScopeImpl(val parent: HandlerEventScope) : HandlerEventScope {
     private var isClosed = false
-    private val listeners: MutableList<Listener> = mutableListOf()
-    private val lambdas: MutableList<RegisteredLambdaHandler> = mutableListOf()
+    private val listeners: MutableSet<Listener> = mutableSetOf()
+    private val lambdas: MutableSet<RegisteredLambdaHandler> = mutableSetOf()
 
     override fun register(listener: Listener) {
         checkClosed()
@@ -57,7 +57,7 @@ class HandlerEventScopeImpl(val parent: HandlerEventScope) : HandlerEventScope {
     }
 
     private fun checkClosed() {
-        if(isClosed)
+        if (isClosed)
             throw IllegalStateException("HandlerEventScope is closed")
     }
 }
