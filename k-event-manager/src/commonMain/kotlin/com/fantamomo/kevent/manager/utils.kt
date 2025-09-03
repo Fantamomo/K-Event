@@ -2,9 +2,10 @@ package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.Dispatchable
 import com.fantamomo.kevent.EventConfiguration
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
@@ -160,21 +161,12 @@ suspend inline fun <reified D : Dispatchable> HandlerEventScope.awaitFilteredEve
 fun <D : Dispatchable> HandlerEventScope.eventFlow(
     event: KClass<D>,
     configuration: EventConfiguration<D> = EventConfiguration.default(),
-): Flow<D> {
-    val channel = Channel<D>(Channel.BUFFERED)
+): Flow<D> = channelFlow {
     val handler = register(event, configuration) {
-        channel.trySend(it).isSuccess
+        trySend(it).onFailure { close() }
     }
-    return flow {
-        try {
-            for (item in channel) {
-                emit(item)
-            }
-        } finally {
-            handler.unregister()
-            channel.close()
-        }
-    }
+
+    awaitClose { handler.unregister() }
 }
 
 /**
