@@ -166,6 +166,22 @@ interface ListenerParameterResolver<T : Any> : EventManagerComponent<ListenerPar
             DynamicListenerParameterResolver(name, type, valueByConfiguration) { _, _, _ -> valueProvider() }
 
         /**
+         * Creates and returns a dynamic listener parameter resolver for the specified type `T`.
+         * This resolver dynamically determines parameter values at runtime using the provided `valueProvider` function.
+         *
+         * @param name The name identifying this resolver.
+         * @param type The `KClass` representation of the type `T` being resolved.
+         * @param valueProvider A function that provides the value of type `T` dynamically when invoked.
+         * @return A `ListenerParameterResolver` instance configured to resolve parameters of type `T`.
+         */
+        fun <T : Any> dynamic(
+            name: String,
+            type: KClass<T>,
+            valueProvider: () -> T,
+        ): ListenerParameterResolver<T> =
+            DynamicListenerParameterResolver(name, type, valueProvider()) { _, _, _ -> valueProvider() }
+
+        /**
          * Creates a static listener parameter resolver that always resolves a given parameter to
          * a constant, pre-defined value.
          *
