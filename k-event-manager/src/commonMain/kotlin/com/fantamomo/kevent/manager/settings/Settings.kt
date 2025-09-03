@@ -42,6 +42,19 @@ object Settings {
      */
     val DISABLE_LOGGER_INJECTION by setting(false)
 
+    /**
+     * Configures whether dead events should be dispatched by the event manager.
+     *
+     * A dead event occurs when an event is posted to the event manager but no
+     * listener is registered to handle it. When this setting is enabled (`true`),
+     * the event manager dispatches such events as dead events, allowing specific
+     * listeners for dead events to handle them. If disabled (`false`), dead events
+     * are ignored and not dispatched.
+     *
+     * By default, this setting is enabled.
+     */
+    val DISPATCH_DEAD_EVENTS by setting(true)
+
 
     private inline fun <reified T> setting(name: String, defaultValue: T) = SettingsEntry<T>(name, defaultValue)
     @Suppress("UNCHECKED_CAST")
