@@ -298,6 +298,7 @@ class DefaultEventManager internal constructor(
         handlers.forEach { it.value.close() }
         handlers.clear()
         scope.cancel()
+        sharedExclusiveExecution.clear()
     }
 
     private fun checkClosed() {

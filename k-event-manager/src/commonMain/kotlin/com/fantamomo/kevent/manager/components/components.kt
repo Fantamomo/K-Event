@@ -69,7 +69,7 @@ operator fun <C : EventManagerComponent<C>> EventManagerComponent<*>.get(key: Ev
  */
 fun <C : EventManagerComponent<C>> EventManagerComponent<*>.getOrThrow(key: EventManagerComponent.Key<C>): C =
     this[key] ?: throw IllegalArgumentException(
-        "EventManagerComponent with key ${key.clazz.simpleName} not found."
+        "EventManagerComponent for key ${key.clazz.simpleName} not found."
     )
 
 /**
