@@ -2,11 +2,12 @@ package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.Dispatchable
 import com.fantamomo.kevent.EventConfiguration
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 import kotlin.reflect.KClass
 
 /**
@@ -26,12 +27,16 @@ import kotlin.reflect.KClass
 suspend fun <D : Dispatchable> HandlerEventScope.awaitEvent(
     event: KClass<D>,
     configuration: EventConfiguration<D> = EventConfiguration.default(),
-): D {
-    val deferred = CompletableDeferred<D>()
-    val handler = register(event, configuration) {
-        deferred.complete(it)
+): D = suspendCancellableCoroutine { cont ->
+    val handler = register(event, configuration) { dispatchable ->
+        if (cont.isActive) {
+            cont.resume(dispatchable)
+        }
     }
-    return deferred.await().also { handler.unregister() }
+
+    cont.invokeOnCancellation {
+        handler.unregister()
+    }
 }
 
 /**
@@ -69,15 +74,7 @@ suspend fun <D : Dispatchable> HandlerEventScope.awaitEventOrNull(
     event: KClass<D>,
     timeoutMillis: Long,
     configuration: EventConfiguration<D> = EventConfiguration.default(),
-): D? {
-    val deferred = CompletableDeferred<D>()
-    val handler = register(event, configuration) {
-        deferred.complete(it)
-    }
-    val result = withTimeoutOrNull(timeoutMillis) { deferred.await() }
-    handler.unregister()
-    return result
-}
+): D? = withTimeoutOrNull(timeoutMillis) { awaitEvent(event, configuration) }
 
 /**
  * Suspends the current coroutine and waits for an event of type [D] to occur within the specified timeout.
@@ -114,14 +111,18 @@ suspend fun <D : Dispatchable> HandlerEventScope.awaitFilteredEvent(
     event: KClass<D>,
     configuration: EventConfiguration<D> = EventConfiguration.default(),
     filter: (D) -> Boolean,
-): D {
-    val deferred = CompletableDeferred<D>()
-    val handler = register(event, configuration) {
-        if (filter(it)) {
-            deferred.complete(it)
+): D = suspendCancellableCoroutine { cont ->
+    val handler = register(event, configuration) { dispatchable ->
+        if (cont.isActive) {
+            if (filter(dispatchable)) {
+                cont.resume(dispatchable)
+            }
         }
     }
-    return deferred.await().also { handler.unregister() }
+
+    cont.invokeOnCancellation {
+        handler.unregister()
+    }
 }
 
 /**
@@ -176,17 +177,34 @@ fun <D : Dispatchable> HandlerEventScope.eventFlow(
     }
 }
 
-    /**
-     * Provides a flow of events of the specified type [D] that are dispatched within the current handler scope.
-     * The flow will emit events as they occur, using the provided configuration or the default configuration.
-     *
-     * @param D The type of event, which must extend [Dispatchable].
-     * @param configuration The configuration for the event handler. Defaults to [EventConfiguration.default].
-     * @return A [Flow] of dispatched events of type [D].
-     *
-     * @author Fantamomo
-     * @since 1.0-SNAPSHOT
-     */
-    inline fun <reified D : Dispatchable> HandlerEventScope.eventFlow(
-        configuration: EventConfiguration<D> = EventConfiguration.default(),
-    ) = eventFlow(D::class, configuration)
+/**
+ * Provides a flow of events of the specified type [D] that are dispatched within the current handler scope.
+ * The flow will emit events as they occur, using the provided configuration or the default configuration.
+ *
+ * @param D The type of event, which must extend [Dispatchable].
+ * @param configuration The configuration for the event handler. Defaults to [EventConfiguration.default].
+ * @return A [Flow] of dispatched events of type [D].
+ *
+ * @author Fantamomo
+ * @since 1.0-SNAPSHOT
+ */
+inline fun <reified D : Dispatchable> HandlerEventScope.eventFlow(
+    configuration: EventConfiguration<D> = EventConfiguration.default(),
+) = eventFlow(D::class, configuration)
+
+/**
+ * Creates a flow of events of type [Dispatchable] within the current [HandlerEventScope].
+ *
+ * This method provides a convenient way to observe and process events of type [Dispatchable]
+ * in a reactive manner using Kotlin Flows. The flow emits events as they are dispatched
+ * within the scope, following the default [EventConfiguration].
+ *
+ * The flow is useful for scenarios where event handling requires asynchronous processing
+ * or when multiple listeners need to react to a specific event type without direct coupling.
+ *
+ * @return A [Flow] of events of type [Dispatchable] within the current scope.
+ *
+ * @author Fantamomo
+ * @since 1.0-SNAPSHOT
+ */
+fun HandlerEventScope.eventFlow() = eventFlow<Dispatchable>(EventConfiguration.default())
