@@ -37,6 +37,8 @@ class DefaultEventManager internal constructor(
 
     private val parameterResolver: List<ListenerParameterResolver<*>>
 
+    private val sharedExclusiveExecution = components.getOrThrow(SharedExclusiveExecution)
+
     private val scope: CoroutineScope =
         components[EventCoroutineScope]?.scope ?: CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -122,7 +124,8 @@ class DefaultEventManager internal constructor(
                 listener,
                 registered.kFunction,
                 newConfiguration,
-                registered.resolvers
+                registered.resolvers,
+                this
             )
             getOrCreateHandlerList(registered.type).add(new)
         }
@@ -184,7 +187,8 @@ class DefaultEventManager internal constructor(
                     listener = listener,
                     kFunction = method,
                     configuration = EventConfiguration.default(),
-                    resolvers = resolvers
+                    resolvers = resolvers,
+                    manager = this,
                 )
 
                 getOrCreateHandlerList(typedEventClass).add(handler)
@@ -224,7 +228,8 @@ class DefaultEventManager internal constructor(
                     listener = listener,
                     kFunction = method,
                     configuration = config as EventConfiguration<Dispatchable>,
-                    resolvers = resolvers
+                    resolvers = resolvers,
+                    manager = this,
                 )
 
                 getOrCreateHandlerList(typedEventClass).add(handler)
@@ -277,7 +282,8 @@ class DefaultEventManager internal constructor(
             type = event,
             listener = null,
             method = handler,
-            configuration = configuration
+            configuration = configuration,
+            manager = this,
         )
         getOrCreateHandlerList(event).add(listener)
         return RegisteredLambdaHandler {
@@ -481,39 +487,37 @@ class DefaultEventManager internal constructor(
         val type: KClass<E>,
         open val listener: Listener?,
         val configuration: EventConfiguration<E>,
+        val manager: DefaultEventManager,
     ) {
         open val isSuspend: Boolean = false
 
         abstract val method: (E) -> Unit
 
+        abstract val handlerId: String
+
         operator fun invoke(event: E) {
             if (configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)) {
-                if (isCurrentlyCalled) return
-                isCurrentlyCalled = true
+                if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return
             }
             try {
                 method(event)
             } finally {
-                isCurrentlyCalled = false
+                manager.sharedExclusiveExecution.release(handlerId)
             }
         }
 
         suspend fun invokeSuspend(event: E, isWaiting: Boolean) {
             if (configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)) {
-                if (isCurrentlyCalled) return
-                isCurrentlyCalled = true
+                if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return
             }
             try {
                 invokeSuspendInternal(event, isWaiting)
             } finally {
-                isCurrentlyCalled = false
+                manager.sharedExclusiveExecution.release(handlerId)
             }
         }
 
         protected open suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {}
-
-        @Volatile
-        protected var isCurrentlyCalled: Boolean = false
     }
 
     private class RegisteredFunctionListener<E : Dispatchable>(
@@ -521,7 +525,10 @@ class DefaultEventManager internal constructor(
         listener: Listener?,
         override val method: (E) -> Unit,
         configuration: EventConfiguration<E>,
-    ) : RegisteredListener<E>(type, listener, configuration)
+        manager: DefaultEventManager,
+    ) : RegisteredListener<E>(type, listener, configuration, manager) {
+        override val handlerId: String = "RegisteredFunctionListener@${type.jvmName}@${method.hashCode()}"
+    }
 
     private class RegisteredKFunctionListener<E : Dispatchable>(
         type: KClass<E>,
@@ -529,12 +536,14 @@ class DefaultEventManager internal constructor(
         val kFunction: KFunction<*>,
         configuration: EventConfiguration<E>,
         val resolvers: Map<KParameter, ListenerParameterResolver<*>>,
-    ) : RegisteredListener<E>(type, listener, configuration) {
+        manager: DefaultEventManager,
+    ) : RegisteredListener<E>(type, listener, configuration, manager) {
         val thisParameter = kFunction.parameters[0]
         val eventParameter = kFunction.parameters[1]
         val actualType = eventParameter.type
         val typeArguments by lazy { actualType.arguments }
         override val isSuspend: Boolean = kFunction.isSuspend
+        override val handlerId: String = "RegisteredKFunctionListener@${type.jvmName}@${listener::class.jvmName}#${kFunction.hashCode()}"
 
         override val method: (E) -> Unit = { evt ->
             val args = mapOf(thisParameter to listener, eventParameter to evt) + resolvers.mapValues {
