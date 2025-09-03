@@ -32,7 +32,7 @@ class ComponentSet internal constructor(internal val components: Set<EventManage
          * immutable instance, optimizing memory usage and providing a consistent reference for
          * operations requiring an empty component set.
          */
-        private val EMPTY = ComponentSet(emptySet())
+        val EMPTY = ComponentSet(emptySet())
         /**
          * Creates a new [ComponentSet] instance containing the given [EventManagerComponent] elements.
          *
