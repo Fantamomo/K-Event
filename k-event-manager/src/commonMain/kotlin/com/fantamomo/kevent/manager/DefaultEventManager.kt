@@ -496,26 +496,28 @@ class DefaultEventManager internal constructor(
 
         abstract val handlerId: String
 
-        operator fun invoke(event: E) {
+        operator fun invoke(event: E): Boolean {
             if (configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)) {
-                if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return
+                if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return false
             }
             try {
                 method(event)
             } finally {
                 manager.sharedExclusiveExecution.release(handlerId)
             }
+            return true
         }
 
-        suspend fun invokeSuspend(event: E, isWaiting: Boolean) {
+        suspend fun invokeSuspend(event: E, isWaiting: Boolean): Boolean {
             if (configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)) {
-                if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return
+                if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return false
             }
             try {
                 invokeSuspendInternal(event, isWaiting)
             } finally {
                 manager.sharedExclusiveExecution.release(handlerId)
             }
+            return true
         }
 
         protected open suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {}
