@@ -136,7 +136,7 @@ configuration(event) {
 * `priority`: Determines handler execution order. Higher runs first.
 * `disallowSubtypes`: If `true`, only matches this exact event class.
 * `exclusiveListenerProcessing`: Prevents this handler from running concurrently. 
-This applies per EventManager instance — multiple managers may still invoke the handler concurrently.
+This applies per `SharedExclusiveExecution` instance.
 * `name`: Optional debug label for this method.
 * `silent`: If `true`, the handler will not prevent `DeadEvent` from being emitted.
 
@@ -506,13 +506,25 @@ class ServerListener : Listener {
 }
 ```
 
+You can add as many `ListenerParameterResolver` as you want, but only one `ExceptionHandler`.
+
+There is also a `SharedExclusiveExecution` component,
+which can be used to prevent concurrent execution of handlers, when the are using `exclusiveListenerProcessing`.
+Every EventManager has its own `SharedExclusiveExecution` instance,
+but you can override when adding it to the manager, via the `+` operator.
+
 If you want to combine some components:
 
 ```kotlin
-val manager = EventManager(SysOutExceptionHandler + parameter + dynamicParameter)
-```
+val sharedExecution = SharedExclusiveExecution()
 
-You can add as many `ListenerParameterResolver` as you want, but only one `ExceptionHandler`.
+val manager = EventManager(
+    SysOutExceptionHandler +
+            parameter +
+            dynamicParameter +
+            sharedExecution
+)
+```
 
 ## 🎓 How to Add to Your Project
 
