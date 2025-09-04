@@ -47,6 +47,15 @@ class HandlerEventScopeImpl(val parent: HandlerEventScope) : HandlerEventScope {
         return parent.register(event, configuration, handler).also { lambdas.add(it) }
     }
 
+    override fun <E : Dispatchable> registerSuspend(
+        event: KClass<E>,
+        configuration: EventConfiguration<E>,
+        handler: suspend (E) -> Unit,
+    ): RegisteredLambdaHandler {
+        checkClosed()
+        return parent.registerSuspend(event, configuration, handler).also { lambdas.add(it) }
+    }
+
     override fun close() {
         checkClosed()
         isClosed = true
