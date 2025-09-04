@@ -292,6 +292,26 @@ class DefaultEventManager internal constructor(
         }
     }
 
+    override fun <E : Dispatchable> registerSuspend(
+        event: KClass<E>,
+        configuration: EventConfiguration<E>,
+        handler: suspend (E) -> Unit,
+    ): RegisteredLambdaHandler {
+        checkClosed()
+        val listener = RegisteredSuspendFunctionListener(
+            type = event,
+            listener = null,
+            configuration = configuration,
+            manager = this,
+            suspendMethode = handler,
+        )
+        getOrCreateHandlerList(event).add(listener)
+        return RegisteredLambdaHandler {
+            @Suppress("UNCHECKED_CAST")
+            (handlers[event] as? HandlerList<E>)?.remove(listener)
+        }
+    }
+
     override fun close() {
         checkClosed()
         isClosed = true
@@ -329,6 +349,7 @@ class DefaultEventManager internal constructor(
             val listenerDescription = when (listener) {
                 is RegisteredFunctionListener<*> -> "lambda: ${listener.method::class.jvmName}"
                 is RegisteredKFunctionListener<*> -> "from: ${listener.listener::class.jvmName}#${listener.kFunction.name}"
+                is RegisteredSuspendFunctionListener<*> -> "suspend lambda: ${listener.suspendMethode::class.jvmName}"
             }
 
             logger.log(Level.SEVERE, "Original exception was ($listenerDescription):", e)
@@ -469,6 +490,10 @@ class DefaultEventManager internal constructor(
             listeners.remove(listener)
         }
 
+        fun remove(listener: RegisteredSuspendFunctionListener<E>) {
+            listeners.remove(listener)
+        }
+
         fun close() {
             listeners.clear()
             sortedListeners = emptyList()
@@ -504,6 +529,7 @@ class DefaultEventManager internal constructor(
         abstract val handlerId: String
 
         operator fun invoke(event: E): Boolean {
+            if (isSuspend) throw UnsupportedOperationException("invoke is not supported for suspend functions.")
             if (configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)) {
                 if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return false
             }
@@ -527,7 +553,9 @@ class DefaultEventManager internal constructor(
             return true
         }
 
-        protected open suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {}
+        protected open suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {
+            throw UnsupportedOperationException("${this::class.jvmName} does not support suspend functions.")
+        }
     }
 
     private class RegisteredFunctionListener<E : Dispatchable>(
@@ -538,6 +566,22 @@ class DefaultEventManager internal constructor(
         manager: DefaultEventManager,
     ) : RegisteredListener<E>(type, listener, configuration, manager) {
         override val handlerId: String = "RegisteredFunctionListener@${type.jvmName}@${method.hashCode()}"
+    }
+
+    private class RegisteredSuspendFunctionListener<E : Dispatchable>(
+        type: KClass<E>,
+        listener: Listener?,
+        configuration: EventConfiguration<E>,
+        manager: DefaultEventManager,
+        val suspendMethode: suspend (E) -> Unit,
+        override val method: (E) -> Unit = { throw IllegalStateException("Use RegisteredSuspendFunctionListener#suspendMethode instead") },
+    ) : RegisteredListener<E>(type, listener, configuration, manager) {
+        override val isSuspend: Boolean = true
+        override val handlerId: String = "RegisteredSuspendFunctionListener@${type.jvmName}@${suspendMethode.hashCode()}"
+
+        override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {
+            suspendMethode(event)
+        }
     }
 
     private class RegisteredKFunctionListener<E : Dispatchable>(
