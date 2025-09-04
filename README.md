@@ -382,7 +382,7 @@ the listener can be registered.
 Sometimes you need in the function another variable name instead of the injection name,
 if that happened you can use `@InjectionName`, where the name in brackets is the name that is uses in the system.
 
-There are 4 default injectable parameter:
+There are 5 default injectable parameter:
 
 - `manager: EventManager`: The instance of the EventManager is passed, which calls the handler.
 - `logger: Logger`: A instance for logging, all `DefaultEventManager` have the same.
@@ -390,6 +390,7 @@ There are 4 default injectable parameter:
 - `isWaiting: Boolean`: For non suspend handler it will always be `true`, for suspend handler:
   - when called with `dispatch` it is `false`
   - when called with `dispatchSuspend` it is `true`
+- `config: EventConfiguration<*>`: The configuration of the handler.
 
 The following example disables `scope` and `logger`:
 
