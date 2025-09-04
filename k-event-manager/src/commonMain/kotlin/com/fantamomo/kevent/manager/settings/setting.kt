@@ -13,7 +13,7 @@ import com.fantamomo.kevent.manager.components.EventManagerComponent
  * @since 1.0-SNAPSHOT
  */
 @Suppress("NOTHING_TO_INLINE")
-inline fun <T> SettingsEntry<T>.with(value: T) = SettingsComponent(this, value)
+inline infix fun <T> SettingsEntry<T>.with(value: T) = SettingsComponent(this, value)
 
 /**
  * Retrieves the setting value associated with the given [SettingsEntry] from the current [ComponentSet].
