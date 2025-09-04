@@ -56,7 +56,7 @@ inline fun <E : Dispatchable> configuration(event: E?, @EventDsl block: EventCon
         callsInPlace(block, InvocationKind.AT_MOST_ONCE)
     }
     if (event == null) {
-        throw ConfigurationCapturedException(createConfigurationScope(block))
+        throwConfigurationScope(block)
     }
 }
 
@@ -113,6 +113,36 @@ inline fun <E : Dispatchable> configuration(event: E?, @EventDsl block: EventCon
 inline fun emptyConfiguration(event: Dispatchable?) {
     contract { returns() implies (event != null) }
     if (event == null) throw ConfigurationCapturedException(EventConfiguration.DEFAULT)
+}
+
+/**
+ * Throws a [ConfigurationCapturedException] encapsulating the event configuration defined
+ * in the provided DSL block.
+ *
+ * This method is primarily used in the event system for capturing the event configuration
+ * during the initialization process. The configuration is specified within the scope of
+ * the [EventConfigurationScope], using a DSL syntax. When invoked, this method executes
+ * the given block, encapsulates the resulting configuration in a [ConfigurationCapturedException],
+ * and throws it. This exception is later caught by the event registration system to extract
+ * and associate the configuration with the respective event handler.
+ *
+ * @param block The DSL block defining the event configuration. The block is executed
+ *              within an instance of [EventConfigurationScope] specific to the event type [E].
+ * @return This method does not return a value as it always throws a [ConfigurationCapturedException].
+ * @throws ConfigurationCapturedException This exception is thrown carrying the configuration data
+ *                                         created within the provided [block].
+ *
+ * @author Fantamomo
+ * @since 1.1-SNAPSHOT
+ */
+@Throws(ConfigurationCapturedException::class)
+@OptIn(ExperimentalContracts::class)
+@JvmSynthetic
+inline fun <E : Dispatchable> throwConfigurationScope(block: @EventDsl EventConfigurationScope<E>.() -> Unit): Nothing {
+    contract {
+        callsInPlace(block, InvocationKind.EXACTLY_ONCE)
+    }
+    throw ConfigurationCapturedException(createConfigurationScope(block))
 }
 
 /**
