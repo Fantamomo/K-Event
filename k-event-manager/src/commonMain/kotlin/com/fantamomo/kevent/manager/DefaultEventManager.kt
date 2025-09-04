@@ -186,16 +186,20 @@ class DefaultEventManager internal constructor(
                         method.isAccessible = true
                         if (method.isSuspend) {
                             var exception: InvocationTargetException? = null
-                            runBlocking {
-                                withTimeout(2.milliseconds) {
-                                    try {
-                                        method.callSuspendBy(arguments)
-                                        exceptionHandler("onMethodDidNotThrowConfiguredException") { onMethodDidNotThrowConfiguredException(listener, method) }
-                                    } catch (e: InvocationTargetException) {
-                                        exception = e
+                            val job = scope.launch(Dispatchers.Unconfined) {
+                                try {
+                                    method.callSuspendBy(arguments)
+                                    exceptionHandler("onMethodDidNotThrowConfiguredException") {
+                                        onMethodDidNotThrowConfiguredException(
+                                            listener,
+                                            method
+                                        )
                                     }
+                                } catch (e: InvocationTargetException) {
+                                    exception = e
                                 }
                             }
+                            job.cancel()
                             if (exception != null) throw exception
                         } else {
                             method.callBy(arguments)
