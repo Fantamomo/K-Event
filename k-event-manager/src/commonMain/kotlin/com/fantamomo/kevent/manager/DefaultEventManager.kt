@@ -631,12 +631,7 @@ class DefaultEventManager internal constructor(
         @Suppress("UNCHECKED_CAST")
         private val extraStrategies: Array<ArgStrategy<E>> by lazy {
             kFunction.parameters.drop(2).map { param ->
-                when (val resolver = resolvers[param]) {
-                    IsWaitingParameterResolver -> WaitingStrategy()
-                    ConfigParameterResolver -> ConfigStrategy(configuration)
-                    is ListenerParameterResolver<*> -> ResolverStrategy(listener, kFunction, resolver)
-                    else -> NullStrategy()
-                }
+                resolvers[param].toStrategy(this)
             }.toTypedArray()
         }
 
@@ -708,6 +703,14 @@ class DefaultEventManager internal constructor(
         private val logger = Logger.getLogger(DefaultEventManager::class.jvmName)
             .apply {
                 level = Level.SEVERE
+            }
+
+        private fun <E : Dispatchable> ListenerParameterResolver<*>?.toStrategy(registered: RegisteredKFunctionListener<E>): ArgStrategy<E> =
+            when (this) {
+                IsWaitingParameterResolver -> WaitingStrategy()
+                ConfigParameterResolver -> ConfigStrategy(registered.configuration)
+                is ListenerParameterResolver<*> -> ResolverStrategy(registered.listener, registered.kFunction, this)
+                else -> NullStrategy()
             }
     }
 
