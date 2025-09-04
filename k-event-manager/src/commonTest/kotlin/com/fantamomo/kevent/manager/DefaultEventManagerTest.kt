@@ -10,9 +10,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.reflect.KFunction
 import kotlin.test.*
 
-data class TestEvent(val message: String) : Dispatchable()
+private data class TestEvent(val message: String) : Dispatchable()
 
-class DeadEventListener : Listener {
+private class DeadEventListener : Listener {
     var deadEventCalled = false
 
     @Register
@@ -21,7 +21,7 @@ class DeadEventListener : Listener {
     }
 }
 
-class TestListener : Listener {
+private class TestListener : Listener {
     var called = false
 
     @Register
@@ -30,11 +30,11 @@ class TestListener : Listener {
     }
 }
 
-class MyGenericEvent<T : Any>(val data: T) : Dispatchable(), SingleGenericTypedEvent {
+private data class MyGenericEvent<T : Any>(val data: T) : Dispatchable(), SingleGenericTypedEvent {
     override fun extractGenericType() = data::class
 }
 
-class PriorityListener(val id: Int, val callOrder: MutableList<Int>) : Listener {
+private class PriorityListener(val id: Int, val callOrder: MutableList<Int>) : Listener {
     @Register
     fun onEvent(event: TestEvent?) {
         configuration(event) {
@@ -44,14 +44,14 @@ class PriorityListener(val id: Int, val callOrder: MutableList<Int>) : Listener 
     }
 }
 
-class FailingListener : Listener {
+private class FailingListener : Listener {
     @Register
     fun onEvent(event: TestEvent) {
         throw RuntimeException("Fail!")
     }
 }
 
-class StringEventListener : Listener {
+private class StringEventListener : Listener {
     var called = false
 
     @Register
@@ -60,7 +60,7 @@ class StringEventListener : Listener {
     }
 }
 
-class IntEventListener : Listener {
+private class IntEventListener : Listener {
     var called = false
 
     @Register
@@ -313,6 +313,6 @@ class DefaultEventManagerTest {
         manager.dispatch(TestEvent("Check Injection"))
 
         assertSame(manager, listener.receivedManager)
-        assertFalse(listener.receivedIsWaiting!!)
+        assertFalse(listener.receivedIsWaiting != false)
     }
 }
