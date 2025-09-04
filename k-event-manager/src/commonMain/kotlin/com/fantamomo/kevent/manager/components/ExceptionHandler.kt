@@ -2,6 +2,7 @@ package com.fantamomo.kevent.manager.components
 
 import com.fantamomo.kevent.Listener
 import kotlin.reflect.KFunction
+import kotlin.reflect.KParameter
 import kotlin.reflect.KType
 import kotlin.reflect.KVisibility
 
@@ -115,6 +116,31 @@ abstract class ExceptionHandler : EventManagerComponent<ExceptionHandler> {
      * @param method The method in the listener that was expected to throw a ConfigurationCapturedException but did not.
      */
     open fun onMethodDidNotThrowConfiguredException(listener: Listener, method: KFunction<*>) {}
+
+    /**
+     * Invoked when a parameter of a method in a listener does not have a resolver.
+     * This function handles cases where a parameter cannot be resolved or matched
+     * during the processing of listener methods.
+     *
+     * Note:
+     * 1. `parameter.type` always equals `type`.
+     * 2. `parameter.name` does not necessarily equal `name`.
+     * 3. `name` corresponds to either `parameter.name` or the value of the
+     *    [com.fantamomo.kevent.utils.InjectionName] annotation if present:
+     *    `(parameter.findAnnotation<InjectionName>()?.value ?: parameter.name) === name`
+     *
+     * @param listener The listener instance that contains the method with the parameter
+     *                 that has no resolver.
+     * @param method The method within the listener whose parameter could not be resolved,
+     *               providing context about the function being processed.
+     * @param parameter The specific parameter that does not have a resolver.
+     * @param name The expected name for the parameter, which is either `parameter.name`
+     *             or [com.fantamomo.kevent.utils.InjectionName.value] if the annotation is present.
+     * @param type The type of the parameter that does not have a resolver.
+     *
+     * @since 1.6-SNAPSHOT
+     */
+    open fun onParameterHasNoResolver(listener: Listener, method: KFunction<*>, parameter: KParameter, name: String, type: KType) {}
 
     /**
      * Provides a no-operation implementation of the exception handler.
