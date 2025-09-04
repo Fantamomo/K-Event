@@ -37,10 +37,19 @@ object Settings {
      * A setting that disables the injection of the `logger:` [java.util.logging.Logger] state into parameter resolution during
      * event dispatching.
      *
-     * By default, the value is `false`, meaning the `scope` injection is enabled. Setting this to
+     * By default, the value is `false`, meaning the `logger` injection is enabled. Setting this to
      * `true` will turn off this behavior.
      */
     val DISABLE_LOGGER_INJECTION by setting(false)
+
+    /**
+     * A setting that disables the injection of the `config:` [com.fantamomo.kevent.EventConfiguration] state into parameter resolution during
+     * event dispatching.
+     *
+     * By default, the value is `false`, meaning the `config` injection is enabled. Setting this to
+     * `true` will turn off this behavior.
+     */
+    val DISABLE_CONFIG_INJECTION by setting(false)
 
     /**
      * Configures whether dead events should be dispatched by the event manager.

@@ -200,3 +200,98 @@ inline fun <reified D : Dispatchable> HandlerEventScope.eventFlow(
  * @since 1.0-SNAPSHOT
  */
 fun HandlerEventScope.eventFlow() = eventFlow<Dispatchable>(EventConfiguration.default())
+
+/**
+ * Awaits for a specified number of events of a given type to be dispatched, returning them in a list.
+ *
+ * This method suspends until the specified number of events matching the given type have been received.
+ * An optional configuration can be provided to customize event handling behavior.
+ *
+ * @param D The type of events to await, extending from [Dispatchable].
+ * @param type The class representing the type of the events to wait for.
+ * @param count The number of events to wait for before resuming.
+ * @param configuration The configuration for the event type. Defaults to [EventConfiguration.default].
+ * @return A list of events of type [D] that were received.
+ *
+ * @author Fantamomo
+ * @since 1.3-SNAPSHOT
+ */
+suspend fun <D : Dispatchable> HandlerEventScope.awaitEvents(
+    type: KClass<D>,
+    count: Int,
+    configuration: EventConfiguration<D> = EventConfiguration.default(),
+): List<D> = suspendCancellableCoroutine { cont ->
+    val events = mutableListOf<D>()
+    val handler = register(type, configuration) {
+        if (cont.isActive) {
+            events.add(it)
+            if (events.size >= count) {
+                cont.resume(events)
+            }
+        }
+    }
+    cont.invokeOnCancellation { handler.unregister() }
+}
+
+/**
+ * Awaits the occurrence of a specified number of events of a certain type
+ * within the current [HandlerEventScope].
+ *
+ * This suspend function blocks the coroutine execution until the specified
+ * number of matching events has been received. The event handling can be
+ * customized by providing an optional [EventConfiguration] for the event type.
+ *
+ * @param D The type of events to await, extending from [Dispatchable].
+ * @param count The number of events to wait for, must be greater than zero.
+ * @param configuration The configuration to apply when awaiting events of type [D].
+ *                       Defaults to [EventConfiguration.default].
+ *
+ * @author Fantamomo
+ * @since 1.3-SNAPSHOT
+ */
+suspend inline fun <reified D : Dispatchable> HandlerEventScope.awaitEvents(
+    count: Int,
+    configuration: EventConfiguration<D> = EventConfiguration.default(),
+) = awaitEvents(D::class, count, configuration)
+
+/**
+ * Awaits and suspends until any event of the specified types is dispatched within the current event scope.
+ *
+ * This method listens for dispatchable events of the provided types and returns the first event
+ * that matches one of the specified types.
+ * If no types are provided, the method awaits for any dispatchable event.
+ * If multiple types are provided, the method awaits for one of the specified types (or one of its subtypes).
+ *
+ * @param D The type of the dispatchable event to await. It must extend [Dispatchable].
+ * @param types Vararg parameter specifying the classes of event types to listen for. If no types
+ *              are provided, all dispatchable events are considered.
+ * @param configuration An optional [EventConfiguration] to customize how the awaited event is handled.
+ *                      Defaults to [EventConfiguration.default].
+ * @return The first dispatched event of the specified types that matches the criteria.
+ *
+ * @author Fantamomo
+ * @since 1.3-SNAPSHOT
+ */
+@Suppress("UNCHECKED_CAST")
+suspend fun <D : Dispatchable> HandlerEventScope.awaitAnyEvent(
+    vararg types: KClass<out D>,
+    configuration: EventConfiguration<D> = EventConfiguration.default(),
+): D {
+    configuration as EventConfiguration<Dispatchable>
+    return when {
+        types.isEmpty() -> awaitEvent<Dispatchable>(configuration)
+        types.size == 1 -> awaitEvent(types[0] as KClass<Dispatchable>, configuration)
+        else -> suspendCancellableCoroutine { cont ->
+            val events = types.toSet()
+            val handler = register(Dispatchable::class, configuration) {
+                if (cont.isActive) {
+                    if (events.contains(it::class)) {
+                        cont.resume(it)
+                    }
+                }
+            }
+
+            cont.invokeOnCancellation { handler.unregister() }
+        }
+    } as D
+}

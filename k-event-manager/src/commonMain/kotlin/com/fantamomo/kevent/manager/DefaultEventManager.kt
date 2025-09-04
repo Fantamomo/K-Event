@@ -69,6 +69,8 @@ class DefaultEventManager internal constructor(
 
         if (!comps.getSetting(Settings.DISABLE_IS_WAITING_INJECTION)) comps += IsWaitingParameterResolver
 
+        if (!comps.getSetting(Settings.DISABLE_CONFIG_INJECTION)) comps += ConfigParameterResolver
+
         parameterResolver = comps.getAll(ListenerParameterResolver.Key)
     }
 
@@ -589,7 +591,7 @@ class DefaultEventManager internal constructor(
                         if (resolver is InternalParameterResolver<*>) {
                             when (resolver) {
                                 IsWaitingParameterResolver -> isWaiting
-                                else -> error("Unexpected internal resolver")
+                                ConfigParameterResolver -> configuration
                             }
                         } else {
                             resolver.resolve(listener, kFunction, event)
@@ -629,5 +631,11 @@ class DefaultEventManager internal constructor(
         override val name: String = "isWaiting"
         override val type = Boolean::class
         override val valueByConfiguration: Boolean = true
+    }
+
+    private data object ConfigParameterResolver : InternalParameterResolver<EventConfiguration<*>> {
+        override val name: String = "config"
+        override val type = EventConfiguration::class
+        override val valueByConfiguration: EventConfiguration<*> = EventConfiguration.DEFAULT
     }
 }
