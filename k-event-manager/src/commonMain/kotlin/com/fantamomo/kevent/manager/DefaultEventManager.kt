@@ -2,10 +2,12 @@ package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.*
 import com.fantamomo.kevent.manager.components.*
+import com.fantamomo.kevent.manager.internal.rethrowIfFatal
 import com.fantamomo.kevent.manager.settings.Settings
 import com.fantamomo.kevent.manager.settings.getSetting
 import com.fantamomo.kevent.utils.InjectionName
 import kotlinx.coroutines.*
+import java.lang.reflect.InaccessibleObjectException
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
@@ -117,6 +119,7 @@ class DefaultEventManager internal constructor(
                     @Suppress("UNCHECKED_CAST")
                     newConfiguration = config as EventConfiguration<Dispatchable>
                 } catch (e: Throwable) {
+                    e.rethrowIfFatal()
                     exceptionHandler("onUnexpectedExceptionDuringRegistration") { onUnexpectedExceptionDuringRegistration(listener, method, e) }
                     continue@out
                 }
@@ -206,6 +209,9 @@ class DefaultEventManager internal constructor(
                             exceptionHandler("onMethodDidNotThrowConfiguredException") { onMethodDidNotThrowConfiguredException(listener, method) }
                         }
                         null
+                    } catch (_: InaccessibleObjectException) {
+                        exceptionHandler("onMethodNotAccessible") { onMethodNotAccessible(listener, method) }
+                        null
                     } catch (e: InvocationTargetException) {
                         val config = (e.targetException as? ConfigurationCapturedException)?.configuration
                         if (config !is EventConfiguration<*>) {
@@ -216,6 +222,7 @@ class DefaultEventManager internal constructor(
                             config as EventConfiguration<Dispatchable>
                         }
                     } catch (t: Throwable) {
+                        t.rethrowIfFatal()
                         exceptionHandler("onUnexpectedExceptionDuringRegistration") { onUnexpectedExceptionDuringRegistration(listener, method, t) }
                         null
                     }
@@ -225,7 +232,7 @@ class DefaultEventManager internal constructor(
 
             try {
                 method.isAccessible = true
-            } catch (_: Throwable) {
+            } catch (_: InaccessibleObjectException) {
                 exceptionHandler("onMethodNotAccessible") { onMethodNotAccessible(listener, method) }
                 continue@out
             }
@@ -341,6 +348,7 @@ class DefaultEventManager internal constructor(
                 (listener as? RegisteredKFunctionListener<*>)?.kFunction
             )
         } catch (handlerException: Throwable) {
+            handlerException.rethrowIfFatal()
             logger.log(
                 Level.SEVERE,
                 "Exception-Handler failed while handling an exception",
@@ -364,6 +372,7 @@ class DefaultEventManager internal constructor(
         try {
             exceptionHandler.block()
         } catch (e: Throwable) {
+            e.rethrowIfFatal()
             logger.log(
                 Level.WARNING,
                 "Method '$methodName' in ${exceptionHandler::class.jvmName} threw an exception.",
@@ -468,9 +477,7 @@ class DefaultEventManager internal constructor(
             val typedEvent = event as E
             var called = false
             for (handler in list) {
-                if (handler.configuration.getOrDefault(Key.DISALLOW_SUBTYPES)) {
-                    if (typedEvent::class != handler.type) continue
-                }
+                if (handler.configuration.getOrDefault(Key.DISALLOW_SUBTYPES) && typedEvent::class != handler.type) continue
                 if (event::class == handler.type && genericTypes.isNotEmpty() && handler is RegisteredKFunctionListener<E> && !handler.allowGenericTypes(
                         genericTypes
                     )
@@ -611,6 +618,7 @@ class DefaultEventManager internal constructor(
             return typeArguments.mapIndexed { index, projection ->
                 if (projection.variance == null) return@mapIndexed true
                 val type = projection.type?.classifier as? KClass<*> ?: return@mapIndexed false
+                @Suppress("SENSELESS_NULL_IN_WHEN") // false positive inspection
                 when (projection.variance) {
                     KVariance.INVARIANT -> type == types[index]
                     KVariance.IN -> types[index].isSuperclassOf(type)
@@ -623,11 +631,17 @@ class DefaultEventManager internal constructor(
 
     companion object {
         private val logger = Logger.getLogger(DefaultEventManager::class.jvmName)
+            .apply {
+                level = Level.SEVERE
+            }
     }
 
     private sealed interface InternalParameterResolver<T : Any> : ListenerParameterResolver<T> {
         override fun resolve(listener: Listener?, methode: KFunction<*>?, event: Dispatchable): T {
-            throw IllegalStateException("This method should not be called.")
+            throw IllegalStateException(
+                "InternalParameterResolver#resolve was called for ${this::class.qualifiedName ?: this::class.jvmName}, " +
+                        "this is a marker and should never be resolved directly."
+            )
         }
     }
 
