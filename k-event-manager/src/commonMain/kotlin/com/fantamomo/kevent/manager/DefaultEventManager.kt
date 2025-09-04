@@ -2,6 +2,7 @@ package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.*
 import com.fantamomo.kevent.manager.components.*
+import com.fantamomo.kevent.manager.internal.all
 import com.fantamomo.kevent.manager.internal.rethrowIfFatal
 import com.fantamomo.kevent.manager.settings.Settings
 import com.fantamomo.kevent.manager.settings.getSetting
@@ -173,10 +174,25 @@ class DefaultEventManager internal constructor(
             }
 
             val resolvers = parameters.dropWhile { it.index < 2 }.associateWith { parameter ->
+                val name = (parameter.findAnnotation<InjectionName>()?.value
+                    ?: parameter.name)
                 parameterResolver.find {
-                    it.name == (parameter.findAnnotation<InjectionName>()?.value
-                        ?: parameter.name) && it.type == parameter.type.classifier
-                } ?: continue@out
+                    it.name == name && it.type == parameter.type.classifier
+                } ?: run {
+                    if (name == null) {
+                        logger.severe("The name of a Parameter which should have a name, has none. " +
+                                "(Parameter index: ${parameter.index}) (Type: ${parameter.type}) " +
+                                "(Kind: ${parameter.kind} (Method: ${listenerClass.jvmName}#${method.name})")
+                    } else {
+                        exceptionHandler("onParameterHasNoResolver") {
+                            onParameterHasNoResolver(
+                                listener, method, parameter,
+                                name, parameter.type
+                            )
+                        }
+                    }
+                    continue@out
+                }
             }
 
             val eventClass = parameters[1].type.classifier as? KClass<*> ?: continue
@@ -636,13 +652,21 @@ class DefaultEventManager internal constructor(
         }
 
         override val method: (E) -> Unit = { evt ->
-            val args = buildArgs(evt, false)
-            kFunction.call(*args)
+            if (extraStrategies.isEmpty()) {
+                kFunction.call(listener, evt)
+            } else {
+                val args = buildArgs(evt, false)
+                kFunction.call(*args)
+            }
         }
 
         override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {
-            val args = buildArgs(event, isWaiting)
-            kFunction.callSuspend(*args)
+            if (extraStrategies.isEmpty()) {
+                kFunction.callSuspend(listener, event)
+            } else {
+                val args = buildArgs(event, isWaiting)
+                kFunction.callSuspend(*args)
+            }
         }
 
         private fun buildArgs(event: E, isWaiting: Boolean): Array<Any?> {
@@ -668,7 +692,7 @@ class DefaultEventManager internal constructor(
                     KVariance.OUT -> types[index].isSubclassOf(type)
                     null -> true
                 }
-            }.all { it }
+            }.all()
         }
     }
 
@@ -681,7 +705,7 @@ class DefaultEventManager internal constructor(
     }
 
     private class ConfigStrategy<E : Dispatchable>(
-        private val configuration: EventConfiguration<E>
+        private val configuration: EventConfiguration<E>,
     ) : ArgStrategy<E> {
         override fun resolve(event: E, isWaiting: Boolean) = configuration
     }
@@ -689,7 +713,7 @@ class DefaultEventManager internal constructor(
     private class ResolverStrategy<E : Dispatchable>(
         private val listener: Listener,
         private val kFunction: KFunction<*>,
-        private val resolver: ListenerParameterResolver<*>
+        private val resolver: ListenerParameterResolver<*>,
     ) : ArgStrategy<E> {
         override fun resolve(event: E, isWaiting: Boolean): Any =
             resolver.resolve(listener, kFunction, event)

@@ -301,8 +301,7 @@ class DefaultEventManagerTest {
             var receivedIsWaiting: Boolean? = null
 
             @Register
-            fun onEvent(event: TestEvent?, manager: EventManager, isWaiting: Boolean) {
-                emptyConfiguration(event)
+            fun onEvent(event: TestEvent, manager: EventManager, isWaiting: Boolean) {
                 receivedManager = manager
                 receivedIsWaiting = isWaiting
             }
