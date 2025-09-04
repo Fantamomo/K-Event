@@ -72,4 +72,21 @@ class EventConfigurationScope<E : Dispatchable> {
      * @return The previous value associated with the key, or null if none
      */
     fun remove(key: Key<*>) = data.remove(key)
+
+    /**
+     * Checks whether the `data` collection is empty.
+     *
+     * @return `true` if the `data` collection is empty, `false` otherwise.
+     */
+    fun isEmpty() = data.isEmpty()
+
+    /**
+     * Represents the current size of the `data` collection.
+     *
+     * This property provides the number of elements stored in the `data` collection,
+     * using its `size` property. It is a read-only property and reflects the up-to-date
+     * size of the `data` collection whenever accessed.
+     */
+    val size: Int
+        get() = data.size
 }
