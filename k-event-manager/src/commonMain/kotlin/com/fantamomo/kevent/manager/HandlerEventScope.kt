@@ -62,6 +62,27 @@ interface HandlerEventScope {
     ): RegisteredLambdaHandler
 
     /**
+     * Registers a suspendable event handler with the event system.
+     *
+     * This method allows for asynchronous handler registration for a specific type of event.
+     * The handler will be invoked whenever an instance of the specified event class is dispatched.
+     * Additionally, a custom event configuration can be provided to modify event-specific behavior.
+     *
+     * @param E The type of event the handler will process. It must extend from [Dispatchable].
+     * @param event The class of the event to register the handler for.
+     * @param configuration The configuration for the event handler. Defaults to the result of [EventConfiguration.default].
+     * @param handler The suspending function to be invoked when the event is dispatched.
+     * @return An instance of [RegisteredLambdaHandler] that can be used to unregister the handler.
+     *
+     * @since 1.3-SNAPSHOT
+     */
+    fun <E : Dispatchable> registerSuspend(
+        event: KClass<E>,
+        configuration: EventConfiguration<E> = EventConfiguration.default(),
+        handler: suspend (E) -> Unit,
+    ): RegisteredLambdaHandler
+
+    /**
      * Closes the `HandlerEventScope` and unregister its handlers.
      *
      * Once closed, the scope cannot be reused, and all
