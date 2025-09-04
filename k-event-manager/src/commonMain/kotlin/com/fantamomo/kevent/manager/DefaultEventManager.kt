@@ -628,38 +628,36 @@ class DefaultEventManager internal constructor(
         override val handlerId: String =
             "RegisteredKFunctionListener@${type.jvmName}@${listener::class.jvmName}#${kFunction.hashCode()}"
 
-        private val argumentOrder: List<(E, Boolean) -> Any?> by lazy {
-            kFunction.parameters.map { param ->
-                when (param.index) {
-                    0 -> { _: E, _: Boolean -> listener }
-                    1 -> { event: E, _: Boolean -> event }
-                    else -> {
-                        val resolver = resolvers[param]
-                        if (resolver is InternalParameterResolver<*>) {
-                            when (resolver) {
-                                IsWaitingParameterResolver -> { _: E, isWaiting: Boolean -> isWaiting }
-                                ConfigParameterResolver -> { _: E, _: Boolean -> configuration }
-                            }
-                        } else {
-                            { event: E, _: Boolean -> resolver?.resolve(listener, kFunction, event) }
-                        }
-                    }
+        @Suppress("UNCHECKED_CAST")
+        private val extraStrategies: Array<ArgStrategy<E>> by lazy {
+            kFunction.parameters.drop(2).map { param ->
+                when (val resolver = resolvers[param]) {
+                    IsWaitingParameterResolver -> WaitingStrategy()
+                    ConfigParameterResolver -> ConfigStrategy(configuration)
+                    is ListenerParameterResolver<*> -> ResolverStrategy(listener, kFunction, resolver)
+                    else -> NullStrategy()
                 }
-            }
+            }.toTypedArray()
         }
 
         override val method: (E) -> Unit = { evt ->
             val args = buildArgs(evt, false)
-            kFunction.call(*args.toTypedArray())
+            kFunction.call(*args)
         }
 
         override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {
             val args = buildArgs(event, isWaiting)
-            kFunction.callSuspend(*args.toTypedArray())
+            kFunction.callSuspend(*args)
         }
 
-        private fun buildArgs(event: E, isWaiting: Boolean): List<Any?> {
-            return argumentOrder.map { it(event, isWaiting) }
+        private fun buildArgs(event: E, isWaiting: Boolean): Array<Any?> {
+            val args = arrayOfNulls<Any?>(2 + extraStrategies.size)
+            args[0] = listener
+            args[1] = event
+            for (i in extraStrategies.indices) {
+                args[i + 2] = extraStrategies[i].resolve(event, isWaiting)
+            }
+            return args
         }
 
         fun allowGenericTypes(types: List<KClass<*>>): Boolean {
@@ -677,6 +675,33 @@ class DefaultEventManager internal constructor(
                 }
             }.all { it }
         }
+    }
+
+    private sealed interface ArgStrategy<E : Dispatchable> {
+        fun resolve(event: E, isWaiting: Boolean): Any?
+    }
+
+    private class WaitingStrategy<E : Dispatchable> : ArgStrategy<E> {
+        override fun resolve(event: E, isWaiting: Boolean) = isWaiting
+    }
+
+    private class ConfigStrategy<E : Dispatchable>(
+        private val configuration: EventConfiguration<E>
+    ) : ArgStrategy<E> {
+        override fun resolve(event: E, isWaiting: Boolean) = configuration
+    }
+
+    private class ResolverStrategy<E : Dispatchable>(
+        private val listener: Listener,
+        private val kFunction: KFunction<*>,
+        private val resolver: ListenerParameterResolver<*>
+    ) : ArgStrategy<E> {
+        override fun resolve(event: E, isWaiting: Boolean): Any =
+            resolver.resolve(listener, kFunction, event)
+    }
+
+    private class NullStrategy<E : Dispatchable> : ArgStrategy<E> {
+        override fun resolve(event: E, isWaiting: Boolean) = null
     }
 
     companion object {
