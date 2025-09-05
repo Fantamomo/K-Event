@@ -21,7 +21,6 @@ import kotlin.reflect.*
 import kotlin.reflect.full.*
 import kotlin.reflect.jvm.isAccessible
 import kotlin.reflect.jvm.jvmName
-import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Default implementation of the EventManager interface for managing event listeners
@@ -110,18 +109,29 @@ class DefaultEventManager internal constructor(
                 try {
                     if (method.isSuspend) {
                         var exception: InvocationTargetException? = null
-                        runBlocking {
-                            withTimeout(2.milliseconds) {
-                                try {
-                                    method.callSuspend(*args.toTypedArray())
-                                } catch (e: InvocationTargetException) {
-                                    exception = e
+                        val job = scope.launch(Dispatchers.Unconfined) {
+                            try {
+                                method.callSuspend(*args.toTypedArray())
+                                exceptionHandler("onMethodDidNotThrowConfiguredException") {
+                                    onMethodDidNotThrowConfiguredException(
+                                        listener,
+                                        method
+                                    )
                                 }
+                            } catch (e: InvocationTargetException) {
+                                exception = e
                             }
                         }
+                        job.cancel()
                         if (exception != null) throw exception
                     } else {
                         method.call(*args.toTypedArray())
+                        exceptionHandler("onMethodDidNotThrowConfiguredException") {
+                            onMethodDidNotThrowConfiguredException(
+                                listener,
+                                method
+                            )
+                        }
                     }
                 } catch (e: InvocationTargetException) {
                     val config = (e.targetException as? ConfigurationCapturedException)?.configuration
@@ -184,7 +194,7 @@ class DefaultEventManager internal constructor(
                 } ?: run {
                     if (name == null) {
                         logger.severe(
-                            "The name of a Parameter which should have a name, has none. " +
+                            "A Parameter which should have a name, has none. " +
                                     "(Parameter index: ${parameter.index}) (Type: ${parameter.type}) " +
                                     "(Kind: ${parameter.kind} (Method: ${listenerClass.jvmName}#${method.name})"
                         )
@@ -796,7 +806,7 @@ class DefaultEventManager internal constructor(
             arg.key to (manager.parameterResolver
                 .find { it.name == arg.key && it.type == arg.value }
                 ?: throw NoResolverException(arg.key, arg.value)
-            ).toStrategy(this)
+                    ).toStrategy(this)
         }.toMap()
 
         override fun invokeInternal(event: E) {
@@ -820,7 +830,7 @@ class DefaultEventManager internal constructor(
             arg.key to (manager.parameterResolver
                 .find { it.name == arg.key && it.type == arg.value }
                 ?: throw NoResolverException(arg.key, arg.value)
-            ).toStrategy(this)
+                    ).toStrategy(this)
         }.toMap()
 
         override fun invokeInternal(event: E) {
