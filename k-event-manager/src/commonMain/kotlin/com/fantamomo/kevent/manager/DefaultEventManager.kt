@@ -675,7 +675,6 @@ class DefaultEventManager internal constructor(
         val resolvers: Map<KParameter, ListenerParameterResolver<*>>,
         manager: DefaultEventManager,
     ) : RegisteredListener<E>(type, configuration, manager) {
-        val thisParameter = kFunction.parameters[0]
         val eventParameter = kFunction.parameters[1]
         private val actualType = eventParameter.type
         private val typeArguments by lazy { actualType.arguments }
