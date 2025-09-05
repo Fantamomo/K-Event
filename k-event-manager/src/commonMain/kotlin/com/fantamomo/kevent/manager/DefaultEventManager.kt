@@ -390,6 +390,16 @@ class DefaultEventManager internal constructor(
         }
     }
 
+    override fun clearStickyEvents() {
+        checkClosed()
+        stickyEvents.clear()
+    }
+
+    override fun removeStickyEvent(clazz: KClass<out Dispatchable>) {
+        checkClosed()
+        stickyEvents.remove(clazz)
+    }
+
     override fun <E : Dispatchable> register(
         event: KClass<E>,
         configuration: EventConfiguration<E>,
@@ -448,6 +458,7 @@ class DefaultEventManager internal constructor(
         isClosed = true
         handlers.forEach { it.value.close() }
         handlers.clear()
+        stickyEvents.clear()
         scope.cancel()
         sharedExclusiveExecution.clear()
     }
