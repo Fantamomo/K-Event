@@ -180,9 +180,11 @@ class DefaultEventManager internal constructor(
                     it.name == name && it.type == parameter.type.classifier
                 } ?: run {
                     if (name == null) {
-                        logger.severe("The name of a Parameter which should have a name, has none. " +
-                                "(Parameter index: ${parameter.index}) (Type: ${parameter.type}) " +
-                                "(Kind: ${parameter.kind} (Method: ${listenerClass.jvmName}#${method.name})")
+                        logger.severe(
+                            "The name of a Parameter which should have a name, has none. " +
+                                    "(Parameter index: ${parameter.index}) (Type: ${parameter.type}) " +
+                                    "(Kind: ${parameter.kind} (Method: ${listenerClass.jvmName}#${method.name})"
+                        )
                     } else {
                         exceptionHandler("onParameterHasNoResolver") {
                             onParameterHasNoResolver(
@@ -306,6 +308,20 @@ class DefaultEventManager internal constructor(
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
+    override fun register(listener: SimpleListener<*>) {
+        checkClosed()
+        val registered = RegisteredSimpleListener(this, listener) as RegisteredListener<Dispatchable>
+        getOrCreateHandlerBucket(registered.type).add(registered)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun register(listener: SimpleSuspendListener<*>) {
+        checkClosed()
+        val registered = RegisteredSimpleSuspendListener(this, listener) as RegisteredListener<Dispatchable>
+        getOrCreateHandlerBucket(registered.type).add(registered)
+    }
+
     override fun dispatch(event: Dispatchable) {
         checkClosed()
         if (handlers.isEmpty()) return
@@ -384,6 +400,16 @@ class DefaultEventManager internal constructor(
         handlers.values.forEach { it.remove(listener) }
     }
 
+    override fun unregister(listener: SimpleListener<*>) {
+        checkClosed()
+        handlers.values.forEach { it.remove(listener) }
+    }
+
+    override fun unregister(listener: SimpleSuspendListener<*>) {
+        checkClosed()
+        handlers.values.forEach { it.remove(listener) }
+    }
+
     override fun close() {
         checkClosed()
         isClosed = true
@@ -416,6 +442,8 @@ class DefaultEventManager internal constructor(
                 is RegisteredFunctionListener<*> -> "lambda: ${listener.method::class.jvmName}"
                 is RegisteredKFunctionListener<*> -> "from: ${listener.listener::class.jvmName}#${listener.kFunction.name}"
                 is RegisteredSuspendFunctionListener<*> -> "suspend lambda: ${listener.suspendMethod::class.jvmName}"
+                is RegisteredSimpleListener<*> -> "simple listener: ${listener.simpleListener::class.jvmName}"
+                is RegisteredSimpleSuspendListener<*> -> "simple suspend listener: ${listener.simpleListener::class.jvmName}"
             }
 
             logger.log(Level.SEVERE, "Original exception was ($listenerDescription):", e)
@@ -454,14 +482,31 @@ class DefaultEventManager internal constructor(
             }
         }
 
-        fun remove(listener: RegisteredFunctionListener<E>) = removeByIdentity(listener)
-        fun remove(listener: RegisteredSuspendFunctionListener<E>) = removeByIdentity(listener)
+        fun remove(listener: RegisteredListener<E>) = removeByIdentity(listener)
+
+        fun remove(target: SimpleListener<*>) {
+            while (true) {
+                val cur = snapshot.get()
+                val next = cur.filterNot { (it as? RegisteredSimpleListener<E>)?.simpleListener === target }
+                if (next.size == cur.size) return
+                if (snapshot.compareAndSet(cur, next)) return
+            }
+        }
+
+        fun remove(target: SimpleSuspendListener<*>) {
+            while (true) {
+                val cur = snapshot.get()
+                val next = cur.filterNot { (it as? RegisteredSimpleSuspendListener<E>)?.simpleListener === target }
+                if (next.size == cur.size) return
+                if (snapshot.compareAndSet(cur, next)) return
+            }
+        }
 
         fun remove(target: Listener) {
             while (true) {
                 val cur = snapshot.get()
                 val next = cur.filterNot { it.listener === target }
-                if (next === cur) return
+                if (next.size == cur.size) return
                 if (snapshot.compareAndSet(cur, next)) return
             }
         }
@@ -470,7 +515,7 @@ class DefaultEventManager internal constructor(
             while (true) {
                 val cur = snapshot.get()
                 val next = cur.filterNot { it === target }
-                if (next === cur) return
+                if (next.size == cur.size) return
                 if (snapshot.compareAndSet(cur, next)) return
             }
         }
@@ -696,6 +741,64 @@ class DefaultEventManager internal constructor(
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
+    private class RegisteredSimpleListener<E : Dispatchable>(
+        manager: DefaultEventManager,
+        val simpleListener: SimpleListener<E>,
+    ) : RegisteredListener<E>(
+        simpleListener.type ?: simpleListener::handle.parameters[1].type.classifier as KClass<E>,
+        null,
+        simpleListener.configuration(),
+        manager
+    ) {
+        private val args = simpleListener.args()
+        private val resolvers: Map<String, ArgStrategy<E>> = args.map { arg ->
+            arg.key to (manager.parameterResolver
+                .find { it.name == arg.key && it.type == arg.value }
+                ?: throw IllegalStateException(
+                    "No resolver found for parameter ${arg.key} with type ${arg.value.jvmName}.",
+                    NO_RESOLVER
+                )).toStrategy(this)
+        }.toMap()
+
+        override val method: (E) -> Unit = { event ->
+            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event, false) })
+        }
+        override val handlerId: String = "RegisteredSimpleListener@${type.jvmName}@${simpleListener.hashCode()}"
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private class RegisteredSimpleSuspendListener<E : Dispatchable>(
+        manager: DefaultEventManager,
+        val simpleListener: SimpleSuspendListener<E>,
+    ) : RegisteredListener<E>(
+        simpleListener.type ?: simpleListener::handle.parameters[1].type.classifier as KClass<E>,
+        null,
+        simpleListener.configuration(),
+        manager
+    ) {
+        private val args = simpleListener.args()
+        private val resolvers: Map<String, ArgStrategy<E>> = args.map { arg ->
+            arg.key to (manager.parameterResolver
+                .find { it.name == arg.key && it.type == arg.value }
+                ?: throw IllegalStateException(
+                    "No resolver found for parameter ${arg.key} with type ${arg.value.jvmName}.",
+                    NO_RESOLVER
+                )).toStrategy(this)
+        }.toMap()
+
+        override val method: (E) -> Unit = {
+            throw UnsupportedOperationException("${this::class.jvmName} does not support none suspend functions.")
+        }
+        override val handlerId: String = "RegisteredSimpleSuspendListener@${type.jvmName}@${simpleListener.hashCode()}"
+
+        override val isSuspend: Boolean = true
+
+        override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {
+            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event, isWaiting) })
+        }
+    }
+
     private sealed interface ArgStrategy<E : Dispatchable> {
         fun resolve(event: E, isWaiting: Boolean): Any?
     }
@@ -711,8 +814,8 @@ class DefaultEventManager internal constructor(
     }
 
     private class ResolverStrategy<E : Dispatchable>(
-        private val listener: Listener,
-        private val kFunction: KFunction<*>,
+        private val listener: Listener?,
+        private val kFunction: KFunction<*>?,
         private val resolver: ListenerParameterResolver<*>,
     ) : ArgStrategy<E> {
         override fun resolve(event: E, isWaiting: Boolean): Any =
@@ -724,16 +827,23 @@ class DefaultEventManager internal constructor(
     }
 
     companion object {
+        internal val NO_RESOLVER = Throwable(null, null).apply { stackTrace = emptyArray() }
+
         private val logger = Logger.getLogger(DefaultEventManager::class.jvmName)
             .apply {
                 level = Level.SEVERE
             }
 
-        private fun <E : Dispatchable> ListenerParameterResolver<*>?.toStrategy(registered: RegisteredKFunctionListener<E>): ArgStrategy<E> =
+        private fun <E : Dispatchable> ListenerParameterResolver<*>?.toStrategy(registered: RegisteredListener<E>): ArgStrategy<E> =
             when (this) {
                 IsWaitingParameterResolver -> WaitingStrategy()
                 ConfigParameterResolver -> ConfigStrategy(registered.configuration)
-                is ListenerParameterResolver<*> -> ResolverStrategy(registered.listener, registered.kFunction, this)
+                is ListenerParameterResolver<*> -> ResolverStrategy(
+                    registered.listener,
+                    (registered as? RegisteredKFunctionListener)?.kFunction,
+                    this
+                )
+
                 else -> NullStrategy()
             }
     }

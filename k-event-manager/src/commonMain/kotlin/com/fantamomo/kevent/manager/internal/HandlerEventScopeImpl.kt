@@ -1,8 +1,6 @@
 package com.fantamomo.kevent.manager.internal
 
-import com.fantamomo.kevent.Dispatchable
-import com.fantamomo.kevent.EventConfiguration
-import com.fantamomo.kevent.Listener
+import com.fantamomo.kevent.*
 import com.fantamomo.kevent.manager.HandlerEventScope
 import com.fantamomo.kevent.manager.RegisteredLambdaHandler
 import kotlin.reflect.KClass
@@ -23,10 +21,21 @@ import kotlin.reflect.KClass
  */
 class HandlerEventScopeImpl(val parent: HandlerEventScope) : HandlerEventScope {
     private var isClosed = false
-    private val listeners: MutableSet<Listener> = mutableSetOf()
-    private val lambdas: MutableSet<RegisteredLambdaHandler> = mutableSetOf()
+    private val listeners: MutableList<Any> = mutableListOf()
 
     override fun register(listener: Listener) {
+        checkClosed()
+        listeners.add(listener)
+        parent.register(listener)
+    }
+
+    override fun register(listener: SimpleListener<*>) {
+        checkClosed()
+        listeners.add(listener)
+        parent.register(listener)
+    }
+
+    override fun register(listener: SimpleSuspendListener<*>) {
         checkClosed()
         listeners.add(listener)
         parent.register(listener)
@@ -38,13 +47,25 @@ class HandlerEventScopeImpl(val parent: HandlerEventScope) : HandlerEventScope {
         parent.unregister(listener)
     }
 
+    override fun unregister(listener: SimpleListener<*>) {
+        checkClosed()
+        listeners.remove(listener)
+        parent.unregister(listener)
+    }
+
+    override fun unregister(listener: SimpleSuspendListener<*>) {
+        checkClosed()
+        listeners.remove(listener)
+        parent.unregister(listener)
+    }
+
     override fun <E : Dispatchable> register(
         event: KClass<E>,
         configuration: EventConfiguration<E>,
         handler: (E) -> Unit,
     ): RegisteredLambdaHandler {
         checkClosed()
-        return parent.register(event, configuration, handler).also { lambdas.add(it) }
+        return parent.register(event, configuration, handler).also { listeners.add(it) }
     }
 
     override fun <E : Dispatchable> registerSuspend(
@@ -53,16 +74,22 @@ class HandlerEventScopeImpl(val parent: HandlerEventScope) : HandlerEventScope {
         handler: suspend (E) -> Unit,
     ): RegisteredLambdaHandler {
         checkClosed()
-        return parent.registerSuspend(event, configuration, handler).also { lambdas.add(it) }
+        return parent.registerSuspend(event, configuration, handler).also { listeners.add(it) }
     }
 
     override fun close() {
         checkClosed()
         isClosed = true
-        listeners.forEach(parent::unregister)
+        listeners.forEach(::unregister)
         listeners.clear()
-        lambdas.forEach(RegisteredLambdaHandler::unregister)
-        lambdas.clear()
+    }
+
+    private fun unregister(listener: Any): Unit = when (listener) {
+        is RegisteredLambdaHandler -> listener.unregister()
+        is Listener -> parent.unregister(listener)
+        is SimpleListener<*> -> parent.unregister(listener)
+        is SimpleSuspendListener<*> -> parent.unregister(listener)
+        else -> {}
     }
 
     private fun checkClosed() {
