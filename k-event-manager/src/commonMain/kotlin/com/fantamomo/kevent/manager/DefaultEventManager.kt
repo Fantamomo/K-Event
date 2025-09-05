@@ -2,6 +2,8 @@ package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.*
 import com.fantamomo.kevent.manager.components.*
+import com.fantamomo.kevent.manager.config.DispatchConfig
+import com.fantamomo.kevent.manager.config.DispatchConfigKey
 import com.fantamomo.kevent.manager.internal.all
 import com.fantamomo.kevent.manager.internal.rethrowIfFatal
 import com.fantamomo.kevent.manager.settings.Settings
@@ -35,6 +37,8 @@ class DefaultEventManager internal constructor(
 
     private val handlers: ConcurrentHashMap<KClass<out Dispatchable>, HandlerBucket<out Dispatchable>> =
         ConcurrentHashMap()
+
+    private val stickyEvents: ConcurrentHashMap<KClass<out Dispatchable>, Dispatchable> = ConcurrentHashMap()
 
     private val exceptionHandler = components.getOrThrow(ExceptionHandler)
 
@@ -343,7 +347,7 @@ class DefaultEventManager internal constructor(
         }
     }
 
-    override fun dispatch(event: Dispatchable) {
+    override fun dispatch(event: Dispatchable, config: DispatchConfig) {
         checkClosed()
         if (handlers.isEmpty()) return
         val eventClass = event::class
@@ -355,12 +359,16 @@ class DefaultEventManager internal constructor(
             called = called or bucket.call(event, genericTypes)
         }
 
-        if (dispatchDeadEvents && !called && eventClass != DeadEvent::class) {
+        if (config.getOrDefault(DispatchConfigKey.STICKY)) {
+            stickyEvents[eventClass] = event
+        }
+
+        if (dispatchDeadEvents && config.getOrDefault(DispatchConfigKey.DISPATCH_DEAD_EVENT) && !called && eventClass != DeadEvent::class) {
             dispatch(DeadEvent(event))
         }
     }
 
-    override suspend fun dispatchSuspend(event: Dispatchable) {
+    override suspend fun dispatchSuspend(event: Dispatchable, config: DispatchConfig) {
         checkClosed()
         val eventClass = event::class
         var called = false
@@ -371,7 +379,11 @@ class DefaultEventManager internal constructor(
             called = called or bucket.callSuspend(event, genericTypes)
         }
 
-        if (dispatchDeadEvents && !called && eventClass != DeadEvent::class) {
+        if (config.getOrDefault(DispatchConfigKey.STICKY)) {
+            stickyEvents[eventClass] = event
+        }
+
+        if (dispatchDeadEvents && config.getOrDefault(DispatchConfigKey.DISPATCH_DEAD_EVENT) && !called && eventClass != DeadEvent::class) {
             dispatchSuspend(DeadEvent(event))
         }
     }
@@ -520,7 +532,27 @@ class DefaultEventManager internal constructor(
             while (true) {
                 val cur = snapshot.get()
                 val next = (cur + listener).sortedByDescending { it.configuration.getOrDefault(Key.PRIORITY) }
-                if (snapshot.compareAndSet(cur, next)) return
+                if (snapshot.compareAndSet(cur, next)) break
+            }
+            dispatchSticky(listener)
+        }
+
+        private fun dispatchSticky(listener: RegisteredListener<E>) {
+            for ((type, event) in stickyEvents) {
+                @Suppress("UNCHECKED_CAST")
+                event as E
+
+                if (!type.isSubclassOf(listener.type)) continue
+
+                if (listener.configuration.getOrDefault(Key.DISALLOW_SUBTYPES) && type != listener.type) continue
+
+                if (listener.isSuspend) {
+                    scope.launch(Dispatchers.Unconfined) {
+                        listener.invokeSuspend(event, false)
+                    }
+                } else {
+                    listener.invoke(event)
+                }
             }
         }
 
