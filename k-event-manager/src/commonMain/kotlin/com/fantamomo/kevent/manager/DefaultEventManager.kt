@@ -700,7 +700,7 @@ class DefaultEventManager internal constructor(
             if (extraStrategies.isEmpty()) {
                 kFunction.call(listener, evt)
             } else {
-                val args = buildArgs(evt, false)
+                val args = buildArgs(evt, true)
                 kFunction.call(*args)
             }
         }
@@ -762,7 +762,7 @@ class DefaultEventManager internal constructor(
         }.toMap()
 
         override val method: (E) -> Unit = { event ->
-            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event, false) })
+            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event, true) })
         }
         override val handlerId: String = "RegisteredSimpleListener@${type.jvmName}@${simpleListener.hashCode()}"
     }
