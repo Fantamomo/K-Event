@@ -610,7 +610,6 @@ class DefaultEventManager internal constructor(
         val manager: DefaultEventManager,
     ) {
         open val isSuspend: Boolean = false
-        abstract val method: (E) -> Unit
         abstract val handlerId: String
 
         operator fun invoke(event: E): Boolean {
@@ -619,7 +618,7 @@ class DefaultEventManager internal constructor(
                 if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return false
             }
             try {
-                method(event)
+                invokeInternal(event)
             } finally {
                 manager.sharedExclusiveExecution.release(handlerId)
             }
@@ -641,29 +640,38 @@ class DefaultEventManager internal constructor(
         protected open suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {
             throw UnsupportedOperationException("${this::class.jvmName} does not support suspend functions.")
         }
+
+        protected abstract fun invokeInternal(event: E)
     }
 
     private class RegisteredFunctionListener<E : Dispatchable>(
         type: KClass<E>,
-        override val method: (E) -> Unit,
+        val method: (E) -> Unit,
         configuration: EventConfiguration<E>,
         manager: DefaultEventManager,
     ) : RegisteredListener<E>(type, configuration, manager) {
         override val handlerId: String = "RegisteredFunctionListener@${type.jvmName}@${method.hashCode()}"
+
+        override fun invokeInternal(event: E) {
+            method(event)
+        }
     }
 
     private class RegisteredSuspendFunctionListener<E : Dispatchable>(
         type: KClass<E>,
         configuration: EventConfiguration<E>,
         manager: DefaultEventManager,
-        val suspendMethod: suspend (E) -> Unit,
-        override val method: (E) -> Unit = { error("Use RegisteredSuspendFunctionListener#suspendMethod instead") },
+        val suspendMethod: suspend (E) -> Unit
     ) : RegisteredListener<E>(type, configuration, manager) {
         override val isSuspend: Boolean = true
         override val handlerId: String = "RegisteredSuspendFunctionListener@${type.jvmName}@${suspendMethod.hashCode()}"
 
         override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {
             suspendMethod(event)
+        }
+
+        override fun invokeInternal(event: E) {
+            throw UnsupportedOperationException("${this::class.jvmName} does not support none suspend listeners.")
         }
     }
 
@@ -690,11 +698,11 @@ class DefaultEventManager internal constructor(
             }.toTypedArray()
         }
 
-        override val method: (E) -> Unit = { evt ->
+        override fun invokeInternal(event: E) {
             if (extraStrategies.isEmpty()) {
-                kFunction.call(listener, evt)
+                kFunction.call(listener, event)
             } else {
-                val args = buildArgs(evt, true)
+                val args = buildArgs(event, true)
                 kFunction.call(*args)
             }
         }
@@ -754,7 +762,7 @@ class DefaultEventManager internal constructor(
                 )).toStrategy(this)
         }.toMap()
 
-        override val method: (E) -> Unit = { event ->
+        override fun invokeInternal(event: E) {
             simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event, true) })
         }
         override val handlerId: String = "RegisteredSimpleListener@${type.jvmName}@${simpleListener.hashCode()}"
@@ -779,8 +787,8 @@ class DefaultEventManager internal constructor(
                 )).toStrategy(this)
         }.toMap()
 
-        override val method: (E) -> Unit = {
-            throw UnsupportedOperationException("${this::class.jvmName} does not support none suspend functions.")
+        override fun invokeInternal(event: E) {
+            throw UnsupportedOperationException("${this::class.jvmName} does not support none suspend listeners.")
         }
         override val handlerId: String = "RegisteredSimpleSuspendListener@${type.jvmName}@${simpleListener.hashCode()}"
 
