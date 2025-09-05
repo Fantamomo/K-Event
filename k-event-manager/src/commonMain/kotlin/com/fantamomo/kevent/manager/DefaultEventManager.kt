@@ -314,15 +314,23 @@ class DefaultEventManager internal constructor(
     @Suppress("UNCHECKED_CAST")
     override fun register(listener: SimpleListener<*>) {
         checkClosed()
-        val registered = RegisteredSimpleListener(this, listener) as RegisteredListener<Dispatchable>
-        getOrCreateHandlerBucket(registered.type).add(registered)
+        try {
+            val registered = RegisteredSimpleListener(this, listener) as RegisteredListener<Dispatchable>
+            getOrCreateHandlerBucket(registered.type).add(registered)
+        } catch (e: NoResolverException) {
+            exceptionHandler("onParameterHasNoResolver") { onParameterHasNoResolver(listener, e.name, e.type) }
+        }
     }
 
     @Suppress("UNCHECKED_CAST")
     override fun register(listener: SimpleSuspendListener<*>) {
         checkClosed()
-        val registered = RegisteredSimpleSuspendListener(this, listener) as RegisteredListener<Dispatchable>
-        getOrCreateHandlerBucket(registered.type).add(registered)
+        try {
+            val registered = RegisteredSimpleSuspendListener(this, listener) as RegisteredListener<Dispatchable>
+            getOrCreateHandlerBucket(registered.type).add(registered)
+        } catch (e: NoResolverException) {
+            exceptionHandler("onParameterHasNoResolver") { onParameterHasNoResolver(listener, e.name, e.type) }
+        }
     }
 
     override fun dispatch(event: Dispatchable) {
@@ -473,8 +481,6 @@ class DefaultEventManager internal constructor(
     }
 
     companion object {
-        internal val NO_RESOLVER = Throwable(null, null).apply { stackTrace = emptyArray() }
-
         private val logger = Logger.getLogger(DefaultEventManager::class.jvmName)
             .apply {
                 level = Level.SEVERE
@@ -547,7 +553,8 @@ class DefaultEventManager internal constructor(
         }
 
         fun existListener(clazz: KClass<out Listener>) =
-            snapshot.get().any { (it as? RegisteredKFunctionListener<E>)?.listener?.let { l -> l::class == clazz } ?: false }
+            snapshot.get()
+                .any { (it as? RegisteredKFunctionListener<E>)?.listener?.let { l -> l::class == clazz } ?: false }
 
         @Suppress("UNCHECKED_CAST")
         fun findAllListeners(clazz: KClass<out Listener>): List<RegisteredKFunctionListener<*>> {
@@ -693,7 +700,7 @@ class DefaultEventManager internal constructor(
         type: KClass<E>,
         configuration: EventConfiguration<E>,
         manager: DefaultEventManager,
-        val suspendMethod: suspend (E) -> Unit
+        val suspendMethod: suspend (E) -> Unit,
     ) : RegisteredListener<E>(type, configuration, manager) {
         override val isSuspend: Boolean = true
         override val handlerId: String = "RegisteredSuspendFunctionListener@${type.jvmName}@${suspendMethod.hashCode()}"
@@ -788,15 +795,14 @@ class DefaultEventManager internal constructor(
         private val resolvers: Map<String, ArgStrategy<E>> = args.map { arg ->
             arg.key to (manager.parameterResolver
                 .find { it.name == arg.key && it.type == arg.value }
-                ?: throw IllegalStateException(
-                    "No resolver found for parameter ${arg.key} with type ${arg.value.jvmName}.",
-                    NO_RESOLVER
-                )).toStrategy(this)
+                ?: throw NoResolverException(arg.key, arg.value)
+            ).toStrategy(this)
         }.toMap()
 
         override fun invokeInternal(event: E) {
             simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event, true) })
         }
+
         override val handlerId: String = "RegisteredSimpleListener@${type.jvmName}@${simpleListener.hashCode()}"
     }
 
@@ -813,15 +819,14 @@ class DefaultEventManager internal constructor(
         private val resolvers: Map<String, ArgStrategy<E>> = args.map { arg ->
             arg.key to (manager.parameterResolver
                 .find { it.name == arg.key && it.type == arg.value }
-                ?: throw IllegalStateException(
-                    "No resolver found for parameter ${arg.key} with type ${arg.value.jvmName}.",
-                    NO_RESOLVER
-                )).toStrategy(this)
+                ?: throw NoResolverException(arg.key, arg.value)
+            ).toStrategy(this)
         }.toMap()
 
         override fun invokeInternal(event: E) {
             throw UnsupportedOperationException("${this::class.jvmName} does not support none suspend listeners.")
         }
+
         override val handlerId: String = "RegisteredSimpleSuspendListener@${type.jvmName}@${simpleListener.hashCode()}"
 
         override val isSuspend: Boolean = true
@@ -884,4 +889,10 @@ class DefaultEventManager internal constructor(
         override val type = EventConfiguration::class
         override val valueByConfiguration: EventConfiguration<*> = EventConfiguration.DEFAULT
     }
+
+    // -----
+    // Utils
+    // -----
+    private class NoResolverException(val name: String, val type: KClass<*>) :
+        IllegalArgumentException("No Resolver with the name `$name` and the type `${type.jvmName}` was found.")
 }
