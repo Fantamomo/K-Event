@@ -472,6 +472,28 @@ class DefaultEventManager internal constructor(
         return handlers.computeIfAbsent(type) { HandlerBucket<E>() } as HandlerBucket<E>
     }
 
+    companion object {
+        internal val NO_RESOLVER = Throwable(null, null).apply { stackTrace = emptyArray() }
+
+        private val logger = Logger.getLogger(DefaultEventManager::class.jvmName)
+            .apply {
+                level = Level.SEVERE
+            }
+
+        private fun <E : Dispatchable> ListenerParameterResolver<*>?.toStrategy(registered: RegisteredListener<E>): ArgStrategy<E> =
+            when (this) {
+                IsWaitingParameterResolver -> WaitingStrategy()
+                ConfigParameterResolver -> ConfigStrategy(registered.configuration)
+                is ListenerParameterResolver<*> -> ResolverStrategy(
+                    (registered as? RegisteredKFunctionListener)?.listener,
+                    (registered as? RegisteredKFunctionListener)?.kFunction,
+                    this
+                )
+
+                else -> NullStrategy()
+            }
+    }
+
     // -------------
     // HandlerBucket
     // -------------
@@ -837,28 +859,6 @@ class DefaultEventManager internal constructor(
 
     private class NullStrategy<E : Dispatchable> : ArgStrategy<E> {
         override fun resolve(event: E, isWaiting: Boolean) = null
-    }
-
-    companion object {
-        internal val NO_RESOLVER = Throwable(null, null).apply { stackTrace = emptyArray() }
-
-        private val logger = Logger.getLogger(DefaultEventManager::class.jvmName)
-            .apply {
-                level = Level.SEVERE
-            }
-
-        private fun <E : Dispatchable> ListenerParameterResolver<*>?.toStrategy(registered: RegisteredListener<E>): ArgStrategy<E> =
-            when (this) {
-                IsWaitingParameterResolver -> WaitingStrategy()
-                ConfigParameterResolver -> ConfigStrategy(registered.configuration)
-                is ListenerParameterResolver<*> -> ResolverStrategy(
-                    (registered as? RegisteredKFunctionListener)?.listener,
-                    (registered as? RegisteredKFunctionListener)?.kFunction,
-                    this
-                )
-
-                else -> NullStrategy()
-            }
     }
 
     // -------------------------
