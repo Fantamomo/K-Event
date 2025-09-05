@@ -77,6 +77,9 @@ class DefaultEventManager internal constructor(
         parameterResolver = comps.getAll(ListenerParameterResolver.Key)
     }
 
+    // ---------
+    // Functions
+    // ---------
     private fun existListener(clazz: KClass<out Listener>) = handlers.values.any { it.existListener(clazz) }
 
     private fun findAllListeners(clazz: KClass<out Listener>): List<RegisteredKFunctionListener<*>> {
@@ -469,6 +472,9 @@ class DefaultEventManager internal constructor(
         return handlers.computeIfAbsent(type) { HandlerBucket<E>() } as HandlerBucket<E>
     }
 
+    // -------------
+    // HandlerBucket
+    // -------------
     private inner class HandlerBucket<E : Dispatchable> {
         private val snapshot: AtomicReference<List<RegisteredListener<E>>> = AtomicReference(emptyList())
 
@@ -604,6 +610,9 @@ class DefaultEventManager internal constructor(
         }
     }
 
+    // --------------------
+    // Registered Listeners
+    // --------------------
     private sealed class RegisteredListener<E : Dispatchable>(
         val type: KClass<E>,
         val configuration: EventConfiguration<E>,
@@ -800,6 +809,9 @@ class DefaultEventManager internal constructor(
         }
     }
 
+    // -----------
+    // ArgStrategy
+    // -----------
     private sealed interface ArgStrategy<E : Dispatchable> {
         fun resolve(event: E, isWaiting: Boolean): Any?
     }
@@ -849,6 +861,9 @@ class DefaultEventManager internal constructor(
             }
     }
 
+    // -------------------------
+    // InternalParameterResolver
+    // -------------------------
     private sealed interface InternalParameterResolver<T : Any> : ListenerParameterResolver<T> {
         override fun resolve(listener: Listener?, methode: KFunction<*>?, event: Dispatchable): T {
             throw IllegalStateException(
