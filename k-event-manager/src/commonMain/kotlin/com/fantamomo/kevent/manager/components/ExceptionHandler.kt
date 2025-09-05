@@ -1,10 +1,9 @@
 package com.fantamomo.kevent.manager.components
 
 import com.fantamomo.kevent.Listener
-import kotlin.reflect.KFunction
-import kotlin.reflect.KParameter
-import kotlin.reflect.KType
-import kotlin.reflect.KVisibility
+import com.fantamomo.kevent.SimpleListener
+import com.fantamomo.kevent.SimpleSuspendListener
+import kotlin.reflect.*
 
 /**
  * A base class for handling exceptions that occur within the event management system.
@@ -140,7 +139,35 @@ abstract class ExceptionHandler : EventManagerComponent<ExceptionHandler> {
      *
      * @since 1.6-SNAPSHOT
      */
-    open fun onParameterHasNoResolver(listener: Listener, method: KFunction<*>, parameter: KParameter, name: String, type: KType) {}
+    open fun onParameterHasNoResolver(
+        listener: Listener,
+        method: KFunction<*>,
+        parameter: KParameter,
+        name: String,
+        type: KType,
+    ) {}
+
+    /**
+     * Called when a parameter required by a [SimpleListener] cannot be resolved.
+     *
+     * @param listener The [SimpleListener] instance with the unresolved parameter.
+     * @param name The expected name of the parameter.
+     * @param type The type of the unresolved parameter.
+     *
+     * @since 1.8-SNAPSHOT
+     */
+    open fun onParameterHasNoResolver(listener: SimpleListener<*>, name: String, type: KClass<*>) {}
+
+    /**
+     * Called when a parameter required by a [SimpleSuspendListener] cannot be resolved.
+     *
+     * @param listener The [SimpleSuspendListener] instance with the unresolved parameter.
+     * @param name The expected name of the parameter.
+     * @param type The type of the unresolved parameter.
+     *
+     * @since 1.8-SNAPSHOT
+     */
+    open fun onParameterHasNoResolver(listener: SimpleSuspendListener<*>, name: String, type: KClass<*>) {}
 
     /**
      * Provides a no-operation implementation of the exception handler.
@@ -157,6 +184,7 @@ abstract class ExceptionHandler : EventManagerComponent<ExceptionHandler> {
             exception: Throwable,
             listener: Listener?,
             methode: KFunction<*>?,
-        ) {}
+        ) {
+        }
     }
 }
