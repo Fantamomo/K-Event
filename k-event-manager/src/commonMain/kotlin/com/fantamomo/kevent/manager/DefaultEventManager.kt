@@ -363,7 +363,6 @@ class DefaultEventManager internal constructor(
         checkClosed()
         val listener = RegisteredFunctionListener(
             type = event,
-            listener = null,
             method = handler,
             configuration = configuration,
             manager = this,
@@ -383,7 +382,6 @@ class DefaultEventManager internal constructor(
         checkClosed()
         val listener = RegisteredSuspendFunctionListener(
             type = event,
-            listener = null,
             configuration = configuration,
             manager = this,
             suspendMethod = handler,
@@ -427,7 +425,7 @@ class DefaultEventManager internal constructor(
         try {
             exceptionHandler.handle(
                 e,
-                listener.listener,
+                (listener as? RegisteredKFunctionListener)?.listener,
                 (listener as? RegisteredKFunctionListener<*>)?.kFunction
             )
         } catch (handlerException: Throwable) {
@@ -505,7 +503,7 @@ class DefaultEventManager internal constructor(
         fun remove(target: Listener) {
             while (true) {
                 val cur = snapshot.get()
-                val next = cur.filterNot { it.listener === target }
+                val next = cur.filterNot { (it as? RegisteredKFunctionListener<E>)?.listener === target }
                 if (next.size == cur.size) return
                 if (snapshot.compareAndSet(cur, next)) return
             }
@@ -521,13 +519,13 @@ class DefaultEventManager internal constructor(
         }
 
         fun existListener(clazz: KClass<out Listener>) =
-            snapshot.get().any { it.listener?.let { l -> l::class == clazz } ?: false }
+            snapshot.get().any { (it as? RegisteredKFunctionListener<E>)?.listener?.let { l -> l::class == clazz } ?: false }
 
         @Suppress("UNCHECKED_CAST")
         fun findAllListeners(clazz: KClass<out Listener>): List<RegisteredKFunctionListener<*>> {
             var firstMatch: Listener? = null
             return snapshot.get().filter { registered ->
-                registered.listener?.let {
+                (registered as? RegisteredKFunctionListener<E>)?.listener?.let {
                     if (it::class != clazz) return@filter true
                     if (firstMatch == null) firstMatch = it
                     it === firstMatch
@@ -608,7 +606,6 @@ class DefaultEventManager internal constructor(
 
     private sealed class RegisteredListener<E : Dispatchable>(
         val type: KClass<E>,
-        open val listener: Listener?,
         val configuration: EventConfiguration<E>,
         val manager: DefaultEventManager,
     ) {
@@ -648,22 +645,20 @@ class DefaultEventManager internal constructor(
 
     private class RegisteredFunctionListener<E : Dispatchable>(
         type: KClass<E>,
-        listener: Listener?,
         override val method: (E) -> Unit,
         configuration: EventConfiguration<E>,
         manager: DefaultEventManager,
-    ) : RegisteredListener<E>(type, listener, configuration, manager) {
+    ) : RegisteredListener<E>(type, configuration, manager) {
         override val handlerId: String = "RegisteredFunctionListener@${type.jvmName}@${method.hashCode()}"
     }
 
     private class RegisteredSuspendFunctionListener<E : Dispatchable>(
         type: KClass<E>,
-        listener: Listener?,
         configuration: EventConfiguration<E>,
         manager: DefaultEventManager,
         val suspendMethod: suspend (E) -> Unit,
         override val method: (E) -> Unit = { error("Use RegisteredSuspendFunctionListener#suspendMethod instead") },
-    ) : RegisteredListener<E>(type, listener, configuration, manager) {
+    ) : RegisteredListener<E>(type, configuration, manager) {
         override val isSuspend: Boolean = true
         override val handlerId: String = "RegisteredSuspendFunctionListener@${type.jvmName}@${suspendMethod.hashCode()}"
 
@@ -674,12 +669,12 @@ class DefaultEventManager internal constructor(
 
     private class RegisteredKFunctionListener<E : Dispatchable>(
         type: KClass<E>,
-        override val listener: Listener,
+        val listener: Listener,
         val kFunction: KFunction<*>,
         configuration: EventConfiguration<E>,
         val resolvers: Map<KParameter, ListenerParameterResolver<*>>,
         manager: DefaultEventManager,
-    ) : RegisteredListener<E>(type, listener, configuration, manager) {
+    ) : RegisteredListener<E>(type, configuration, manager) {
         val thisParameter = kFunction.parameters[0]
         val eventParameter = kFunction.parameters[1]
         private val actualType = eventParameter.type
@@ -747,7 +742,6 @@ class DefaultEventManager internal constructor(
         val simpleListener: SimpleListener<E>,
     ) : RegisteredListener<E>(
         simpleListener.type ?: simpleListener::handle.parameters[1].type.classifier as KClass<E>,
-        null,
         simpleListener.configuration(),
         manager
     ) {
@@ -773,7 +767,6 @@ class DefaultEventManager internal constructor(
         val simpleListener: SimpleSuspendListener<E>,
     ) : RegisteredListener<E>(
         simpleListener.type ?: simpleListener::handle.parameters[1].type.classifier as KClass<E>,
-        null,
         simpleListener.configuration(),
         manager
     ) {
@@ -839,7 +832,7 @@ class DefaultEventManager internal constructor(
                 IsWaitingParameterResolver -> WaitingStrategy()
                 ConfigParameterResolver -> ConfigStrategy(registered.configuration)
                 is ListenerParameterResolver<*> -> ResolverStrategy(
-                    registered.listener,
+                    (registered as? RegisteredKFunctionListener)?.listener,
                     (registered as? RegisteredKFunctionListener)?.kFunction,
                     this
                 )
