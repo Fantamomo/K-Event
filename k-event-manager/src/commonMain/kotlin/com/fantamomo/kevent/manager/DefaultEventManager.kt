@@ -75,6 +75,8 @@ class DefaultEventManager internal constructor(
 
         if (!comps.getSetting(Settings.DISABLE_IS_WAITING_INJECTION)) comps += IsWaitingParameterResolver
 
+        if (!comps.getSetting(Settings.DISABLE_IS_STICKY_INJECTION)) comps += IsStickyParameterResolver
+
         if (!comps.getSetting(Settings.DISABLE_CONFIG_INJECTION)) comps += ConfigParameterResolver
 
         parameterResolver = comps.getAll(ListenerParameterResolver.Key)
@@ -511,6 +513,7 @@ class DefaultEventManager internal constructor(
         private fun <E : Dispatchable> ListenerParameterResolver<*>?.toStrategy(registered: RegisteredListener<E>): ArgStrategy<E> =
             when (this) {
                 IsWaitingParameterResolver -> WaitingStrategy()
+                IsStickyParameterResolver -> StickyStrategy()
                 ConfigParameterResolver -> ConfigStrategy(registered.configuration)
                 is ListenerParameterResolver<*> -> ResolverStrategy(
                     (registered as? RegisteredKFunctionListener)?.listener,
@@ -548,10 +551,10 @@ class DefaultEventManager internal constructor(
 
                 if (listener.isSuspend) {
                     scope.launch(Dispatchers.Unconfined) {
-                        listener.invokeSuspend(event, false)
+                        listener.invokeSuspend(event, false, true)
                     }
                 } else {
-                    listener.invoke(event)
+                    listener.invoke(event, true)
                 }
             }
         }
@@ -630,7 +633,7 @@ class DefaultEventManager internal constructor(
                 if (handler.isSuspend) {
                     scope.launch(Dispatchers.Unconfined) {
                         try {
-                            handler.invokeSuspend(typedEvent, false)
+                            handler.invokeSuspend(typedEvent, false, false)
                         } catch (e: Throwable) {
                             handleException(e, handler)
                         }
@@ -638,7 +641,7 @@ class DefaultEventManager internal constructor(
                     if (!silent) called = true
                 } else {
                     try {
-                        if (handler(typedEvent) && !silent) called = true
+                        if (handler(typedEvent, false) && !silent) called = true
                     } catch (e: Throwable) {
                         handleException(e, handler)
                     }
@@ -664,9 +667,9 @@ class DefaultEventManager internal constructor(
                 val silent = handler.configuration.getOrDefault(Key.SILENT)
                 try {
                     val success = if (handler.isSuspend) {
-                        handler.invokeSuspend(typedEvent, true)
+                        handler.invokeSuspend(typedEvent, true, false)
                     } else {
-                        handler.invoke(typedEvent)
+                        handler.invoke(typedEvent, false)
                     }
                     if (success && !silent) called = true
                 } catch (e: Throwable) {
@@ -692,25 +695,25 @@ class DefaultEventManager internal constructor(
         open val isSuspend: Boolean = false
         abstract val handlerId: String
 
-        operator fun invoke(event: E): Boolean {
+        operator fun invoke(event: E, isSticky: Boolean): Boolean {
             if (isSuspend) throw UnsupportedOperationException("invoke is not supported for suspend functions.")
             if (configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)) {
                 if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return false
             }
             try {
-                invokeInternal(event)
+                invokeInternal(event, isSticky)
             } finally {
                 manager.sharedExclusiveExecution.release(handlerId)
             }
             return true
         }
 
-        suspend fun invokeSuspend(event: E, isWaiting: Boolean): Boolean {
+        suspend fun invokeSuspend(event: E, isWaiting: Boolean, isSticky: Boolean): Boolean {
             if (configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)) {
                 if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return false
             }
             try {
-                invokeSuspendInternal(event, isWaiting)
+                invokeSuspendInternal(event, isWaiting, isSticky)
             } finally {
                 manager.sharedExclusiveExecution.release(handlerId)
             }
@@ -718,11 +721,11 @@ class DefaultEventManager internal constructor(
         }
 
         @Throws(UnsupportedOperationException::class)
-        protected open suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {
+        protected open suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean, isSticky: Boolean) {
             throw UnsupportedOperationException(this::class.jvmName + if (isSuspend) " has not overridden invokeSuspendInternal" else " does not support suspend invocation")
         }
 
-        protected abstract fun invokeInternal(event: E)
+        protected abstract fun invokeInternal(event: E, isSticky: Boolean)
     }
 
     private class RegisteredFunctionListener<E : Dispatchable>(
@@ -733,7 +736,7 @@ class DefaultEventManager internal constructor(
     ) : RegisteredListener<E>(type, configuration, manager) {
         override val handlerId: String = "RegisteredFunctionListener@${type.jvmName}@${method.hashCode()}"
 
-        override fun invokeInternal(event: E) {
+        override fun invokeInternal(event: E, isSticky: Boolean) {
             method(event)
         }
     }
@@ -747,11 +750,11 @@ class DefaultEventManager internal constructor(
         override val isSuspend: Boolean = true
         override val handlerId: String = "RegisteredSuspendFunctionListener@${type.jvmName}@${suspendMethod.hashCode()}"
 
-        override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {
+        override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean, isSticky: Boolean) {
             suspendMethod(event)
         }
 
-        override fun invokeInternal(event: E) {
+        override fun invokeInternal(event: E, isSticky: Boolean) {
             throw UnsupportedOperationException("${this::class.jvmName} does not support none suspend listeners.")
         }
     }
@@ -779,30 +782,30 @@ class DefaultEventManager internal constructor(
             }.toTypedArray()
         }
 
-        override fun invokeInternal(event: E) {
+        override fun invokeInternal(event: E, isSticky: Boolean) {
             if (extraStrategies.isEmpty()) {
                 kFunction.call(listener, event)
             } else {
-                val args = buildArgs(event, true)
+                val args = buildArgs(event, true, isSticky)
                 kFunction.call(*args)
             }
         }
 
-        override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {
+        override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean, isSticky: Boolean) {
             if (extraStrategies.isEmpty()) {
                 kFunction.callSuspend(listener, event)
             } else {
-                val args = buildArgs(event, isWaiting)
+                val args = buildArgs(event, isWaiting, isSticky)
                 kFunction.callSuspend(*args)
             }
         }
 
-        private fun buildArgs(event: E, isWaiting: Boolean): Array<Any?> {
+        private fun buildArgs(event: E, isWaiting: Boolean, isSticky: Boolean): Array<Any?> {
             val args = arrayOfNulls<Any?>(2 + extraStrategies.size)
             args[0] = listener
             args[1] = event
             for (i in extraStrategies.indices) {
-                args[i + 2] = extraStrategies[i].resolve(event, isWaiting)
+                args[i + 2] = extraStrategies[i].resolve(event, isWaiting, isSticky)
             }
             return args
         }
@@ -841,8 +844,8 @@ class DefaultEventManager internal constructor(
                     ).toStrategy(this)
         }.toMap()
 
-        override fun invokeInternal(event: E) {
-            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event, true) })
+        override fun invokeInternal(event: E, isSticky: Boolean) {
+            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event, true, isSticky) })
         }
 
         override val handlerId: String = "RegisteredSimpleListener@${type.jvmName}@${simpleListener.hashCode()}"
@@ -865,7 +868,7 @@ class DefaultEventManager internal constructor(
                     ).toStrategy(this)
         }.toMap()
 
-        override fun invokeInternal(event: E) {
+        override fun invokeInternal(event: E, isSticky: Boolean) {
             throw UnsupportedOperationException("${this::class.jvmName} does not support none suspend listeners.")
         }
 
@@ -873,8 +876,8 @@ class DefaultEventManager internal constructor(
 
         override val isSuspend: Boolean = true
 
-        override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {
-            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event, isWaiting) })
+        override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean, isSticky: Boolean) {
+            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event, isWaiting, isSticky) })
         }
     }
 
@@ -882,17 +885,21 @@ class DefaultEventManager internal constructor(
     // ArgStrategy
     // -----------
     private sealed interface ArgStrategy<E : Dispatchable> {
-        fun resolve(event: E, isWaiting: Boolean): Any?
+        fun resolve(event: E, isWaiting: Boolean, isSticky: Boolean): Any?
     }
 
     private class WaitingStrategy<E : Dispatchable> : ArgStrategy<E> {
-        override fun resolve(event: E, isWaiting: Boolean) = isWaiting
+        override fun resolve(event: E, isWaiting: Boolean, isSticky: Boolean) = isWaiting
+    }
+
+    private class StickyStrategy<E : Dispatchable> : ArgStrategy<E> {
+        override fun resolve(event: E, isWaiting: Boolean, isSticky: Boolean) = isSticky
     }
 
     private class ConfigStrategy<E : Dispatchable>(
         private val configuration: EventConfiguration<E>,
     ) : ArgStrategy<E> {
-        override fun resolve(event: E, isWaiting: Boolean) = configuration
+        override fun resolve(event: E, isWaiting: Boolean, isSticky: Boolean) = configuration
     }
 
     private class ResolverStrategy<E : Dispatchable>(
@@ -900,12 +907,12 @@ class DefaultEventManager internal constructor(
         private val kFunction: KFunction<*>?,
         private val resolver: ListenerParameterResolver<*>,
     ) : ArgStrategy<E> {
-        override fun resolve(event: E, isWaiting: Boolean): Any =
+        override fun resolve(event: E, isWaiting: Boolean, isSticky: Boolean): Any =
             resolver.resolve(listener, kFunction, event)
     }
 
     private class NullStrategy<E : Dispatchable> : ArgStrategy<E> {
-        override fun resolve(event: E, isWaiting: Boolean) = null
+        override fun resolve(event: E, isWaiting: Boolean, isSticky: Boolean) = null
     }
 
     // -------------------------
@@ -930,6 +937,12 @@ class DefaultEventManager internal constructor(
         override val name: String = "config"
         override val type = EventConfiguration::class
         override val valueByConfiguration: EventConfiguration<*> = EventConfiguration.DEFAULT
+    }
+
+    private data object IsStickyParameterResolver : InternalParameterResolver<Boolean> {
+        override val name: String = "isSticky"
+        override val type = Boolean::class
+        override val valueByConfiguration: Boolean = false
     }
 
     // -----
