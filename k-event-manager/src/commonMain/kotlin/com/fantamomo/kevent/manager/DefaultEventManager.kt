@@ -637,8 +637,9 @@ class DefaultEventManager internal constructor(
             return true
         }
 
+        @Throws(UnsupportedOperationException::class)
         protected open suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean) {
-            throw UnsupportedOperationException("${this::class.jvmName} does not support suspend functions.")
+            throw UnsupportedOperationException(this::class.jvmName + if (isSuspend) " has not overridden invokeSuspendInternal" else " does not support suspend invocation")
         }
 
         protected abstract fun invokeInternal(event: E)
