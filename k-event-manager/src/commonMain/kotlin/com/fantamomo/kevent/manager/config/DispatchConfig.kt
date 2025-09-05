@@ -7,6 +7,8 @@ class DispatchConfig(private val data: Map<DispatchConfigKey<*>, Any?>) {
 
     fun <T> getOrDefault(key: DispatchConfigKey<T>) = get(key) ?: key.defaultValue
 
+    fun <T> getOrDefault(key: DispatchConfigKey<T>, default: T) = get(key) ?: default
+
     operator fun <T> contains(key: DispatchConfigKey<T>) = key in data
 
     operator fun <T> contains(value: T) = value in data.values

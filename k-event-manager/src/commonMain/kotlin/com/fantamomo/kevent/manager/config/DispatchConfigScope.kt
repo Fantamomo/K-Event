@@ -10,6 +10,8 @@ class DispatchConfigScope {
     @Suppress("UNCHECKED_CAST")
     operator fun <T> get(key: DispatchConfigKey<T>): T? = data[key] as? T?
 
+    fun <T> getOrDefault(key: DispatchConfigKey<T>, default: T) = get(key) ?: default
+
     fun <T> getOrDefault(key: DispatchConfigKey<T>) = get(key) ?: key.defaultValue
 
     operator fun <T> contains(key: DispatchConfigKey<T>) = key in data
