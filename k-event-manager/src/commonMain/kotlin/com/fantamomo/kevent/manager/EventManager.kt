@@ -1,6 +1,7 @@
 package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.Dispatchable
+import com.fantamomo.kevent.manager.config.DispatchConfig
 
 /**
  * Interface for managing event listeners and dispatching events in the event system.
@@ -22,7 +23,7 @@ interface EventManager : HandlerEventScope {
      *
      * @param event The event instance to be dispatched to the appropriate listeners.
      */
-    fun dispatch(event: Dispatchable)
+    fun dispatch(event: Dispatchable, config: DispatchConfig = DispatchConfig.EMPTY)
 
     /**
      * Dispatches an event to all registered event listeners asynchronously.
@@ -34,5 +35,5 @@ interface EventManager : HandlerEventScope {
      *
      * @param event The event instance to be dispatched to the appropriate listeners.
      */
-    suspend fun dispatchSuspend(event: Dispatchable)
+    suspend fun dispatchSuspend(event: Dispatchable, config: DispatchConfig = DispatchConfig.EMPTY)
 }
