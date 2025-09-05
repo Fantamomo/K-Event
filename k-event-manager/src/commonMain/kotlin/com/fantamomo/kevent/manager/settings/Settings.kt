@@ -17,6 +17,18 @@ object Settings {
      * `true` will turn off this behavior.
      */
     val DISABLE_IS_WAITING_INJECTION by setting(false)
+
+    /**
+     * A setting that disables the injection of the `isSticky:` [Boolean] state into parameter resolution during
+     * event dispatching.
+     *
+     * By default, the value is `false`, meaning the `isSticky` injection is enabled. Setting this to
+     * `true` will turn off this behavior.
+     *
+     * @since 1.9-SNAPSHOT
+     */
+    val DISABLE_IS_STICKY_INJECTION by setting(false)
+
     /**
      * A setting that disables the injection of the `manager:` [com.fantamomo.kevent.manager.EventManager] state into parameter resolution during
      * event dispatching.
@@ -25,6 +37,7 @@ object Settings {
      * `true` will turn off this behavior.
      */
     val DISABLE_EVENTMANAGER_INJECTION by setting(false)
+
     /**
      * A setting that disables the injection of the `scope:` [kotlinx.coroutines.CoroutineScope] state into parameter resolution during
      * event dispatching.
@@ -33,6 +46,7 @@ object Settings {
      * `true` will turn off this behavior.
      */
     val DISABLE_SCOPE_INJECTION by setting(false)
+
     /**
      * A setting that disables the injection of the `logger:` [java.util.logging.Logger] state into parameter resolution during
      * event dispatching.
@@ -66,6 +80,8 @@ object Settings {
 
 
     private inline fun <reified T> setting(name: String, defaultValue: T) = SettingsEntry<T>(name, defaultValue)
+
     @Suppress("UNCHECKED_CAST")
-    private inline fun <reified T> setting(defaultValue: T) = LazySettingsEntry(T::class as KClass<T & Any>, defaultValue)
+    private inline fun <reified T> setting(defaultValue: T) =
+        LazySettingsEntry(T::class as KClass<T & Any>, defaultValue)
 }
