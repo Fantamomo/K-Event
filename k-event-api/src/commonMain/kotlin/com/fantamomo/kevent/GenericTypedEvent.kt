@@ -5,20 +5,19 @@ import kotlin.reflect.KClass
 /**
  * Marker interface for events that expose their generic type arguments at runtime.
  *
- * This allows the event system to perform more specific type matching
- * for generic event types, enabling listeners to react only to certain
- * parameterizations of a generic class.
+ * This enables the event system to perform precise type matching for generic events,
+ * allowing listeners to react only to specific parameterizations of a generic class.
  *
- * For example, an event like `DeadEvent<T>` can implement this interface
- * to provide the actual runtime type of `T`, enabling listeners like:
+ * For example, an event like `DeadEvent<T>` can implement this interface to provide
+ * the actual runtime type of `T`, allowing listeners such as:
  *
  * ```
  * @Register
  * fun onDead(event: DeadEvent<PlayerJoinedEvent>) { ... }
  * ```
  *
- * If an event implements this interface, the event system will use the
- * returned list of `KClass` objects to perform type-based matching.
+ * If implemented, the event system will use the returned list of `KClass` objects
+ * for type-based matching.
  *
  * @see SingleGenericTypedEvent for the single-type variant.
  * @author Fantamomo
@@ -29,16 +28,15 @@ interface GenericTypedEvent {
      * Returns the list of runtime generic types associated with this event.
      *
      * The types should be returned in declaration order. For example,
-     * for a class `ResultEvent<T, R>`, this method should return:
+     * for a class `ResultEvent<T, R>`, this should return:
      *
      * ```
      * listOf(T::class, R::class)
      * ```
      *
-     * If any of the types are unknown (e.g., null), the implementation may
-     * substitute `Nothing::class`.
+     * Unknown types can be represented with `Nothing::class`.
      *
-     * @return List of KClass objects representing the runtime types of the generics.
+     * @return List of KClass objects representing the runtime generic types.
      */
     fun extractGenericTypes(): List<KClass<*>>
 }
