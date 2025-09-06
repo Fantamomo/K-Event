@@ -3,45 +3,41 @@ package com.fantamomo.kevent
 import kotlin.reflect.KClass
 
 /**
- * Represents a simple configuration interface for event listeners in an event system.
+ * Represents a simple configuration interface for event listeners.
  *
- * The `SimpleConfiguration` interface is designed to define and provide configurations
- * for handling events of type [E], which extend [Dispatchable]. It offers functionality
- * for setting up event-specific configurations, retrieving argument mappings, and defining
- * the type of events handled by the listener.
+ * The `SimpleConfiguration` interface allows defining configurations for handling
+ * events of type [E], which extend [Dispatchable]. It provides mechanisms to
+ * specify event types, configure event handling behavior, and map listener arguments.
  *
- * @param E The type of event that this configuration applies to, extending [Dispatchable].
+ * @param E The type of event this configuration applies to, extending [Dispatchable].
  * @author Fantamomo
  * @since 1.6-SNAPSHOT
  */
 sealed interface SimpleConfiguration<E : Dispatchable> {
+
     /**
-     * Represents the type of event handled by this listener.
+     * The type of event handled by this listener.
      *
-     * This property determines the specific event type that the listener is configured to handle.
-     * If this is null, the listener will attempt to deduce the type from the event parameter passed
-     * to the `handle` method. This fallback mechanism relies on the event's runtime type to ensure
-     * compatible processing.
+     * Determines the specific event class that the listener is configured to handle.
+     * If null, the listener will attempt to infer the type from the event instance
+     * passed to the handler, using the event's runtime type.
      *
-     * It is intended to be used in scenarios where the event type needs to be explicitly defined
-     * or derived dynamically during listener execution.
+     * This is useful when the event type should be explicitly defined or
+     * dynamically determined during execution.
      *
-     * @return The Kotlin class representing of the event type [E], or null if it should be deduced.
+     * @return The Kotlin class of the event type [E], or null to infer it at runtime.
      */
     val type: KClass<E>?
         get() = null
 
-
     /**
-     * Configures and returns an immutable [EventConfiguration] for the given event type.
+     * Configures and returns an immutable [EventConfiguration] for the listener.
      *
-     * This method is invoked during the registration of an event listener to define the
-     * configuration for handling events of type [E]. It creates a mutable configuration
-     * scope, calls the [configure] function within that scope, and then returns an
-     * immutable [EventConfiguration] instance.
+     * This method is invoked during listener registration. It creates a mutable
+     * [EventConfigurationScope], applies the configuration via [configure], and
+     * then returns a finalized, immutable [EventConfiguration].
      *
-     * @return An immutable [EventConfiguration] instance containing the finalized configuration
-     *         for handling events of type [E].
+     * @return An immutable [EventConfiguration] representing the listener's configuration.
      */
     fun configuration(): EventConfiguration<E> {
         val scope = EventConfigurationScope<E>()
@@ -50,27 +46,23 @@ sealed interface SimpleConfiguration<E : Dispatchable> {
     }
 
     /**
-     * Configures the event handling behavior within the given [EventConfigurationScope].
+     * Defines the event handling configuration within a given [EventConfigurationScope].
      *
-     * This method is used internally during the creation of an event configuration
-     * to define specific settings or properties for handling events of type [E].
-     * It operates within the scope provided by [EventConfigurationScope], allowing
-     * customization of the event handling logic.
+     * This function is intended to be called internally by [configuration] to set
+     * up listener-specific options and properties for events of type [E].
+     * Direct invocation outside of this process is not supported.
      *
-     * This method should only be invoked by the [configuration] function. Direct invocation
-     * of this method is not supported by the default event system implementation.
-     *
-     * @receiver The [EventConfigurationScope] in which the event handling configuration is defined.
+     * @receiver The [EventConfigurationScope] used to define event handling options.
      */
     fun EventConfigurationScope<E>.configure() {}
 
     /**
-     * Provides a map of argument names and their corresponding types required for event handling.
+     * Provides a mapping of listener argument names to their respective types.
      *
-     * This method returns an empty map by default, serving as a base for specific implementations
-     * where arguments for event processing need to be defined.
+     * By default, this returns an empty map. Implementations can override this
+     * to specify required argument names and types for event processing.
      *
-     * @return A map where the keys are argument names as strings, and the values are the corresponding argument types as [KClass].
+     * @return A map where keys are argument names (String) and values are their types ([KClass]).
      */
     fun args(): Map<String, KClass<*>> = emptyMap()
 }
