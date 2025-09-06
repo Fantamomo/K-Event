@@ -70,8 +70,8 @@ sealed interface EventConfiguration<E : Dispatchable> {
      * @author Fantamomo
      * @since 1.4-SNAPSHOT
      */
-    private class EventConfigurationImpl<E : Dispatchable>(
-        private val data: Map<Key<*>, Any?>
+    class EventConfigurationImpl<E : Dispatchable> @PublishedApi internal constructor(
+        internal val data: Map<Key<*>, Any?>
     ) : EventConfiguration<E> {
 
         @Suppress("UNCHECKED_CAST")
