@@ -33,24 +33,13 @@ interface HandlerEventScope {
     /**
      * Registers a simple event listener with the event system.
      *
-     * This method adds an instance of a [SimpleListener] to the event handling mechanism.
+     * This method adds an instance of a [SimpleListener] or [SimpleSuspendListener] to the event handling mechanism.
      * The provided listener will be notified of events it is configured to handle.
      *
      * @param listener The simple listener to register, responsible for handling a specific type of event.
-     * @since 1.7-SNAPSHOT
+     * @since 1.14-SNAPSHOT
      */
-    fun register(listener: SimpleListener<*>)
-
-    /**
-     * Registers a suspendable event listener with the event system.
-     *
-     * This method allows adding an instance of [SimpleSuspendListener] to the event system for handling events asynchronously.
-     * The provided listener will be notified and process events it is configured to handle when they are dispatched.
-     *
-     * @param listener The suspendable listener to register, capable of handling a specific type of event asynchronously.
-     * @since 1.7-SNAPSHOT
-     */
-    fun register(listener: SimpleSuspendListener<*>)
+    fun register(listener: SimpleConfiguration<*>)
 
     /**
      * Unregisters an event listener from the event system.
@@ -65,24 +54,13 @@ interface HandlerEventScope {
     /**
      * Unregisters a simple event listener from the event system.
      *
-     * This method removes a previously registered instance of [SimpleListener] from the event system.
+     * This method removes a previously registered instance of [SimpleListener] or [SimpleSuspendListener] from the event system.
      * Once unregistered, the listener will no longer be notified or handle any dispatched events.
      *
      * @param listener The simple listener to be unregistered, previously registered with the event system.
+     * @since 1.14-SNAPSHOT
      */
-    fun unregister(listener: SimpleListener<*>)
-
-    /**
-     * Unregisters a suspendable event listener from the event system.
-     *
-     * This method removes a previously registered instance of [SimpleSuspendListener]
-     * from the event handling mechanism. Once unregistered, the listener will no longer
-     * receive or handle dispatched events asynchronously.
-     *
-     * @param listener The suspendable listener to be unregistered, previously registered
-     *                 with the event system.
-     */
-    fun unregister(listener: SimpleSuspendListener<*>)
+    fun unregister(listener: SimpleConfiguration<*>)
 
     /**
      * Registers an event-specific handler with its configuration.
