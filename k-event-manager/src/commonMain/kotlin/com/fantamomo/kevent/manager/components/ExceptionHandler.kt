@@ -1,8 +1,7 @@
 package com.fantamomo.kevent.manager.components
 
 import com.fantamomo.kevent.Listener
-import com.fantamomo.kevent.SimpleListener
-import com.fantamomo.kevent.SimpleSuspendListener
+import com.fantamomo.kevent.SimpleConfiguration
 import kotlin.reflect.*
 
 /**
@@ -148,26 +147,15 @@ abstract class ExceptionHandler : EventManagerComponent<ExceptionHandler> {
     ) {}
 
     /**
-     * Called when a parameter required by a [SimpleListener] cannot be resolved.
+     * Called when a parameter required by a [com.fantamomo.kevent.SimpleListener] or [com.fantamomo.kevent.SimpleSuspendListener] cannot be resolved.
      *
-     * @param listener The [SimpleListener] instance with the unresolved parameter.
+     * @param listener The [SimpleConfiguration] instance with the unresolved parameter.
      * @param name The expected name of the parameter.
      * @param type The type of the unresolved parameter.
      *
      * @since 1.8-SNAPSHOT
      */
-    open fun onParameterHasNoResolver(listener: SimpleListener<*>, name: String, type: KClass<*>) {}
-
-    /**
-     * Called when a parameter required by a [SimpleSuspendListener] cannot be resolved.
-     *
-     * @param listener The [SimpleSuspendListener] instance with the unresolved parameter.
-     * @param name The expected name of the parameter.
-     * @param type The type of the unresolved parameter.
-     *
-     * @since 1.8-SNAPSHOT
-     */
-    open fun onParameterHasNoResolver(listener: SimpleSuspendListener<*>, name: String, type: KClass<*>) {}
+    open fun onParameterHasNoResolver(listener: SimpleConfiguration<*>, name: String, type: KClass<*>) {}
 
     /**
      * Provides a no-operation implementation of the exception handler.

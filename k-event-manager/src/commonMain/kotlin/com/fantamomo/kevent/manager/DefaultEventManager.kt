@@ -328,21 +328,14 @@ class DefaultEventManager internal constructor(
     }
 
     @Suppress("UNCHECKED_CAST")
-    override fun register(listener: SimpleListener<*>) {
+    override fun register(listener: SimpleConfiguration<*>) {
         checkClosed()
         try {
-            val registered = RegisteredSimpleListener(this, listener) as RegisteredListener<Dispatchable>
-            getOrCreateHandlerBucket(registered.type).add(registered)
-        } catch (e: NoResolverException) {
-            exceptionHandler("onParameterHasNoResolver") { onParameterHasNoResolver(listener, e.name, e.type) }
-        }
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    override fun register(listener: SimpleSuspendListener<*>) {
-        checkClosed()
-        try {
-            val registered = RegisteredSimpleSuspendListener(this, listener) as RegisteredListener<Dispatchable>
+            val simpleListener = when (listener) {
+                is SimpleListener<*> -> RegisteredSimpleListener(this, listener)
+                is SimpleSuspendListener<*> -> RegisteredSimpleSuspendListener(this, listener)
+            }
+            val registered = simpleListener as RegisteredListener<Dispatchable>
             getOrCreateHandlerBucket(registered.type).add(registered)
         } catch (e: NoResolverException) {
             exceptionHandler("onParameterHasNoResolver") { onParameterHasNoResolver(listener, e.name, e.type) }
@@ -443,12 +436,7 @@ class DefaultEventManager internal constructor(
         handlers.values.forEach { it.remove(listener) }
     }
 
-    override fun unregister(listener: SimpleListener<*>) {
-        checkClosed()
-        handlers.values.forEach { it.remove(listener) }
-    }
-
-    override fun unregister(listener: SimpleSuspendListener<*>) {
+    override fun unregister(listener: SimpleConfiguration<*>) {
         checkClosed()
         handlers.values.forEach { it.remove(listener) }
     }
@@ -573,19 +561,13 @@ class DefaultEventManager internal constructor(
 
         fun remove(listener: RegisteredListener<E>) = removeByIdentity(listener)
 
-        fun remove(target: SimpleListener<*>) {
+        fun remove(target: SimpleConfiguration<*>) {
             while (true) {
                 val cur = snapshot.get()
-                val next = cur.filterNot { (it as? RegisteredSimpleListener<E>)?.simpleListener === target }
-                if (next.size == cur.size) return
-                if (snapshot.compareAndSet(cur, next)) return
-            }
-        }
-
-        fun remove(target: SimpleSuspendListener<*>) {
-            while (true) {
-                val cur = snapshot.get()
-                val next = cur.filterNot { (it as? RegisteredSimpleSuspendListener<E>)?.simpleListener === target }
+                val next = cur.filterNot {
+                    (it as? RegisteredSimpleListener<E>)?.simpleListener === target ||
+                            (it as? RegisteredSimpleSuspendListener<E>)?.simpleListener === target
+                }
                 if (next.size == cur.size) return
                 if (snapshot.compareAndSet(cur, next)) return
             }
