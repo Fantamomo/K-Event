@@ -1,8 +1,11 @@
 package com.fantamomo.kevent.manager
 
 import com.fantamomo.kevent.Dispatchable
-import com.fantamomo.kevent.manager.config.DispatchConfig
 import com.fantamomo.kevent.manager.config.DispatchConfigScope
+import com.fantamomo.kevent.manager.config.createDispatchConfig
+import kotlin.contracts.ExperimentalContracts
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
 
 /**
  * Dispatches an event to all registered listeners with a configurable dispatch scope.
@@ -16,10 +19,10 @@ import com.fantamomo.kevent.manager.config.DispatchConfigScope
  * @since 1.9-SNAPSHOT
  * @author Fantamomo
  */
-inline fun <E : Dispatchable> EventManager.dispatch(event: E, config: DispatchConfigScope.() -> Unit) {
-    val scope = DispatchConfigScope()
-    scope.config()
-    dispatch(event, DispatchConfig(scope))
+@OptIn(ExperimentalContracts::class)
+inline fun <E : Dispatchable> EventManager.dispatch(event: E, config: DispatchConfigScope<E>.() -> Unit) {
+    contract { callsInPlace(config, InvocationKind.EXACTLY_ONCE) }
+    dispatch(event, createDispatchConfig(config))
 }
 
 /**
@@ -35,8 +38,8 @@ inline fun <E : Dispatchable> EventManager.dispatch(event: E, config: DispatchCo
  * @since 1.9-SNAPSHOT
  * @author Fantamomo
  */
-suspend inline fun <E : Dispatchable> EventManager.dispatchSuspend(event: E, config: DispatchConfigScope.() -> Unit) {
-    val scope = DispatchConfigScope()
-    scope.config()
-    dispatchSuspend(event, DispatchConfig(scope))
+@OptIn(ExperimentalContracts::class)
+suspend inline fun <E : Dispatchable> EventManager.dispatchSuspend(event: E, config: DispatchConfigScope<E>.() -> Unit) {
+    contract { callsInPlace(config, InvocationKind.EXACTLY_ONCE) }
+    dispatchSuspend(event, createDispatchConfig(config))
 }
