@@ -3,34 +3,34 @@ package com.fantamomo.kevent
 import kotlin.reflect.KClass
 
 /**
- * Represents a dispatchable entity in the event system.
+ * Represents a dispatchable entity within the event system.
  *
- * A dispatchable is the base class for all events within this event handling framework.
- * It serves as the foundational type that can be extended to define custom events.
- * Subclasses of `Dispatchable` are designed to provide specific event-related functionality
- * and can be dispatched within the system.
+ * `Dispatchable` serves as the base class for all events in this framework.
+ * It provides a common type that can be extended to define custom events.
+ * Subclasses of `Dispatchable` can implement specific event-related functionality
+ * and be dispatched within the system.
  *
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
 abstract class Dispatchable {
     /**
-     * Classes inheriting from `Dispatchable` should implement this interface in their companion
-     * objects, allowing developers to use extension functions directly on the event type
-     * for easier listener registration and management.
+     * Interface for companion objects of classes inheriting from `Dispatchable`.
      *
-     * @param E The type of event that the implementing class represents. This must extend
-     *          from `Dispatchable` to ensure compatibility with the event system.
+     * Implementing this interface allows developers to use extension functions
+     * directly on the event type, simplifying listener registration and management.
+     *
+     * @param E The event type represented by the implementing class. Must extend
+     *          `Dispatchable` to be compatible with the event system.
      * @author Fantamomo
      * @since 1.0-SNAPSHOT
      */
     interface Listenable<E : Dispatchable> {
         /**
-         * The type of event represented by this listenable instance.
+         * The Kotlin class corresponding to the event type `E`.
          *
-         * This property provides the Kotlin class corresponding to the event type `E`.
-         * It is used to identify and dispatch events of the specified type within
-         * the event-handling system.
+         * This property is used by the event system to identify
+         * events of the specified type.
          *
          * @property eventType The class type of the event `E`, which extends `Dispatchable`.
          */
