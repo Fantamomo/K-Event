@@ -125,6 +125,8 @@ configuration(event) {
     priority = Priority.HIGH
     disallowSubtypes = true
     exclusiveListenerProcessing = true
+    silent = true
+    ignoreStickyEvents = true
     name = "JoinHandler"
 }
 ```
@@ -137,8 +139,9 @@ configuration(event) {
 * `disallowSubtypes`: If `true`, only matches this exact event class.
 * `exclusiveListenerProcessing`: Prevents this handler from running concurrently. 
 This applies per `SharedExclusiveExecution` instance.
-* `name`: Optional debug label for this method.
 * `silent`: If `true`, the handler will not prevent `DeadEvent` from being emitted.
+* `ignoreStickyEvents`: If `true`, the handler will not receive sticky events.
+* `name`: Optional debug label for this method.
 
 The configuration is stored inside the manager’s registry and used every time this event is dispatched.
 

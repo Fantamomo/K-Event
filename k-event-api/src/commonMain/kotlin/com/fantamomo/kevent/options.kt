@@ -93,6 +93,23 @@ var EventConfigurationScope<*>.silent: Boolean
     set(value) = set(Key.SILENT, value)
 
 /**
+ * Configures whether sticky events should be ignored for the current event handler configuration.
+ *
+ * Sticky events are events that have been dispatched before the handler was registered and are typically
+ * replayed to new handlers to ensure they are processed. When this property is set to `true`, the event
+ * handler will not process any previously dispatched sticky events, regardless of their presence.
+ *
+ * By default, this value is determined by the default configuration of the associated [Key].
+ *
+ * @property ignoreStickyEvents A `Boolean` value indicating whether to ignore sticky events.
+ * @author Fantamomo
+ * @since 1.3-SNAPSHOT
+ */
+var EventConfigurationScope<*>.ignoreStickyEvents: Boolean
+    get() = getOrDefault(Key.IGNORE_STICKY_EVENTS)
+    set(value) = set(Key.IGNORE_STICKY_EVENTS, value)
+
+/**
  * Use to set the name of a Listener.
  *
  * It may potentially be used by other systems in the future for further expansion
