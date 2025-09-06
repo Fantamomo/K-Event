@@ -1,5 +1,6 @@
 package com.fantamomo.kevent.manager.config
 
+import com.fantamomo.kevent.Dispatchable
 import com.fantamomo.kevent.EventDsl
 
 /**
@@ -17,11 +18,13 @@ import com.fantamomo.kevent.EventDsl
  * @since 1.9-SNAPSHOT
  */
 @EventDsl
-class DispatchConfigScope {
+class DispatchConfigScope<E : Dispatchable> @PublishedApi internal constructor(internal val data: MutableMap<DispatchConfigKey<*>, Any?>) {
+
     /**
-     * A mutable map that stores configuration data for event dispatching.
+     * Creates a new instance of `DispatchConfigScope` with an empty mutable map
+     * as the initial configuration data.
      */
-    internal val data = mutableMapOf<DispatchConfigKey<*>, Any?>()
+    constructor() : this(mutableMapOf())
 
     /**
      * Sets the value associated with a specified [DispatchConfigKey] in the configuration data.
