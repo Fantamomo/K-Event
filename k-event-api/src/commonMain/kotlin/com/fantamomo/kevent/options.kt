@@ -1,28 +1,25 @@
 package com.fantamomo.kevent
 
 /**
- * Internal property to cast the current [EventConfigurationScope] to an [EventConfiguration].
+ * Internal property to cast an [EventConfigurationScope] to an [EventConfiguration].
  *
- * This property is only visible within this file and is used to access implementation details
- * of [EventConfiguration] when working with an [EventConfigurationScope].
+ * Only visible within this file, used to access implementation details of [EventConfiguration].
  *
  * @receiver The [EventConfigurationScope] instance to cast.
  * @return The [EventConfiguration] instance.
  * @param D The type of [Dispatchable] the configuration applies to.
- *
  * @since 1.0-SNAPSHOT
  */
 private inline val <D : Dispatchable> EventConfigurationScope<D>.internal
     get() = this as EventConfiguration<D>
 
 /**
- * Retrieves the configured [Priority] for the current [EventConfiguration].
+ * Retrieves the configured [Priority] for an [EventConfiguration].
  *
- * If no priority is explicitly set, this will return [Priority.Standard.NORMAL] by default.
+ * Defaults to [Priority.Standard.NORMAL] if not explicitly set.
  *
  * @receiver The [EventConfiguration] to read from.
  * @return The configured [Priority], or the default if none is set.
- *
  * @see Priority
  * @see Key.PRIORITY
  * @since 1.4-SNAPSHOT
@@ -31,11 +28,9 @@ val EventConfiguration<*>.priority: Priority
     get() = getOrDefault(Key.PRIORITY)
 
 /**
- * Extension property for setting and getting the priority of an event handler.
+ * Extension property to get or set the priority of an event handler.
  *
- * This property provides a convenient way to access the [Priority] configuration
- * option in the event configuration DSL. It uses the predefined [Key.PRIORITY] key
- * to store and retrieve the priority value.
+ * Uses [Key.PRIORITY] to store and retrieve the value within the configuration DSL.
  *
  * Example:
  * ```
@@ -44,13 +39,12 @@ val EventConfiguration<*>.priority: Priority
  * }
  * ```
  *
- * **Default:** [Priority.Standard.NORMAL]
+ * Default: [Priority.Standard.NORMAL]
  *
- * @receiver The [EventConfigurationScope] that this property belongs to.
+ * @receiver The [EventConfigurationScope] this property belongs to.
  * @property priority The priority level for the event handler.
- *
- * @see Priority
  * @see Key.PRIORITY
+ * @see Priority
  * @since 1.0-SNAPSHOT
  */
 var EventConfigurationScope<*>.priority: Priority
@@ -58,13 +52,12 @@ var EventConfigurationScope<*>.priority: Priority
     set(value) = set(Key.PRIORITY, value)
 
 /**
- * Retrieves whether subtypes of the event are disallowed in this [EventConfiguration].
+ * Retrieves whether subtypes of the event are disallowed.
  *
- * **Default:** `false`
+ * Default: `false`
  *
  * @receiver The [EventConfiguration] to read from.
  * @return `true` if subtypes are disallowed, `false` otherwise.
- *
  * @see Key.DISALLOW_SUBTYPES
  * @since 1.4-SNAPSHOT
  */
@@ -72,11 +65,10 @@ val EventConfiguration<*>.disallowSubtypes: Boolean
     get() = getOrDefault(Key.DISALLOW_SUBTYPES)
 
 /**
- * Determines whether subtypes of the event are disallowed for event handling.
+ * Specifies whether subtypes of the event are disallowed for handling.
  *
- * If set to `true`, handlers will only respond to the exact event type and will ignore
- * events derived from that type. By default, this property is set to `false`, allowing
- * handlers to process subtypes of the event.
+ * If `true`, handlers will only respond to the exact event type.
+ * Default: `false`, allowing subtypes to be handled.
  *
  * Example:
  * ```
@@ -85,11 +77,8 @@ val EventConfiguration<*>.disallowSubtypes: Boolean
  * }
  * ```
  *
- * **Default:** `false`
- *
- * @receiver The [EventConfigurationScope] that this property belongs to.
- * @property disallowSubtypes Whether subtypes of the event are disallowed.
- *
+ * @receiver The [EventConfigurationScope] this property belongs to.
+ * @property disallowSubtypes Whether subtypes are disallowed.
  * @see Key.DISALLOW_SUBTYPES
  * @since 1.0-SNAPSHOT
  */
@@ -100,11 +89,10 @@ var EventConfigurationScope<*>.disallowSubtypes: Boolean
 /**
  * Retrieves whether the listener is configured for exclusive processing.
  *
- * **Default:** `false`
+ * Default: `false`
  *
  * @receiver The [EventConfiguration] to read from.
  * @return `true` if exclusive processing is enabled, otherwise `false`.
- *
  * @see Key.EXCLUSIVE_LISTENER_PROCESSING
  * @since 1.4-SNAPSHOT
  */
@@ -114,9 +102,7 @@ val EventConfiguration<*>.exclusiveListenerProcessing: Boolean
 /**
  * Specifies whether a listener should process events exclusively.
  *
- * When this property is set to `true`, the associated listener will not process
- * a new event if it is still actively handling a previous one. This ensures sequential
- * processing and prevents overlapping execution.
+ * When `true`, the listener will not handle a new event while actively processing another.
  *
  * Example:
  * ```
@@ -125,11 +111,10 @@ val EventConfiguration<*>.exclusiveListenerProcessing: Boolean
  * }
  * ```
  *
- * **Default:** `false`
+ * Default: `false`
  *
- * @receiver The [EventConfigurationScope] that this property belongs to.
+ * @receiver The [EventConfigurationScope] this property belongs to.
  * @property exclusiveListenerProcessing Whether exclusive listener processing is enabled.
- *
  * @see Key.EXCLUSIVE_LISTENER_PROCESSING
  * @since 1.0-SNAPSHOT
  */
@@ -140,11 +125,10 @@ var EventConfigurationScope<*>.exclusiveListenerProcessing: Boolean
 /**
  * Retrieves whether the listener is marked as silent.
  *
- * **Default:** `false`
+ * Default: `false`
  *
  * @receiver The [EventConfiguration] to read from.
  * @return `true` if the listener is silent, otherwise `false`.
- *
  * @see Key.SILENT
  * @since 1.4-SNAPSHOT
  */
@@ -152,12 +136,10 @@ val EventConfiguration<*>.silent: Boolean
     get() = getOrDefault(Key.SILENT)
 
 /**
- * Marks whether a listener is considered "silent".
+ * Marks whether a listener is considered silent.
  *
- * When `true`, the listener will not prevent a [DeadEvent] from being dispatched
- * if it is the only listener for a given event. This allows passive observers,
- * loggers, or debug tools to listen to all events without affecting
- * [DeadEvent] suppression.
+ * When `true`, the listener does not prevent [DeadEvent] dispatch,
+ * allowing observers, loggers, or debug tools to listen without affecting processing.
  *
  * Example:
  * ```
@@ -166,11 +148,10 @@ val EventConfiguration<*>.silent: Boolean
  * }
  * ```
  *
- * **Default:** `false`
+ * Default: `false`
  *
- * @receiver The [EventConfigurationScope] that this property belongs to.
- * @property silent Whether the listener is considered silent.
- *
+ * @receiver The [EventConfigurationScope] this property belongs to.
+ * @property silent Whether the listener is silent.
  * @see Key.SILENT
  * @since 1.0-SNAPSHOT
  */
@@ -181,11 +162,10 @@ var EventConfigurationScope<*>.silent: Boolean
 /**
  * Retrieves whether sticky events should be ignored.
  *
- * **Default:** Determined by [Key.IGNORE_STICKY_EVENTS].
+ * Default: determined by [Key.IGNORE_STICKY_EVENTS].
  *
  * @receiver The [EventConfiguration] to read from.
  * @return `true` if sticky events are ignored, otherwise `false`.
- *
  * @see Key.IGNORE_STICKY_EVENTS
  * @since 1.4-SNAPSHOT
  */
@@ -193,11 +173,10 @@ val EventConfiguration<*>.ignoreStickyEvents: Boolean
     get() = getOrDefault(Key.IGNORE_STICKY_EVENTS)
 
 /**
- * Configures whether sticky events should be ignored for the current event handler configuration.
+ * Configures whether sticky events should be ignored for this event handler.
  *
- * Sticky events are events that have been dispatched before the handler was registered
- * and are typically replayed to new handlers. When `true`, the event handler will not
- * process any previously dispatched sticky events.
+ * Sticky events are previously dispatched events replayed to new handlers.
+ * When `true`, these events are ignored.
  *
  * Example:
  * ```
@@ -206,11 +185,10 @@ val EventConfiguration<*>.ignoreStickyEvents: Boolean
  * }
  * ```
  *
- * **Default:** See [Key.IGNORE_STICKY_EVENTS]
+ * Default: See [Key.IGNORE_STICKY_EVENTS]
  *
- * @receiver The [EventConfigurationScope] that this property belongs to.
- * @property ignoreStickyEvents Whether sticky events should be ignored.
- *
+ * @receiver The [EventConfigurationScope] this property belongs to.
+ * @property ignoreStickyEvents Whether sticky events are ignored.
  * @see Key.IGNORE_STICKY_EVENTS
  * @since 1.3-SNAPSHOT
  */
@@ -221,11 +199,10 @@ var EventConfigurationScope<*>.ignoreStickyEvents: Boolean
 /**
  * Retrieves the configured name for the listener.
  *
- * **Default:** `null`
+ * Default: `null`
  *
  * @receiver The [EventConfiguration] to read from.
- * @return The configured name, or `null` if none is set.
- *
+ * @return The configured name, or `null` if none.
  * @see Key.NAME
  * @since 1.4-SNAPSHOT
  */
@@ -233,10 +210,9 @@ val EventConfiguration<*>.name: String?
     get() = get(Key.NAME)
 
 /**
- * Sets or retrieves the name of a listener within the event configuration.
+ * Sets or retrieves the name of a listener in the configuration.
  *
- * This property allows assigning a human-readable identifier to a listener,
- * which can be helpful for debugging, logging, or integration with other systems.
+ * Assigns a human-readable identifier for debugging, logging, or integration purposes.
  *
  * Example:
  * ```
@@ -245,11 +221,10 @@ val EventConfiguration<*>.name: String?
  * }
  * ```
  *
- * **Default:** `null`
+ * Default: `null`
  *
- * @receiver The [EventConfigurationScope] that this property belongs to.
- * @property name The human-readable identifier for the listener.
- *
+ * @receiver The [EventConfigurationScope] this property belongs to.
+ * @property name The human-readable identifier.
  * @see Key.NAME
  * @since 1.0-SNAPSHOT
  */
