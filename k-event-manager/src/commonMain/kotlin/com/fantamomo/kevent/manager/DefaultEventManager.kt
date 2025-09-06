@@ -545,21 +545,21 @@ class DefaultEventManager internal constructor(
         fun add(listener: RegisteredListener<E>) {
             while (true) {
                 val cur = snapshot.get()
-                val next = (cur + listener).sortedByDescending { it.configuration.getOrDefault(Key.PRIORITY) }
+                val next = (cur + listener).sortedByDescending { it.configuration.priority }
                 if (snapshot.compareAndSet(cur, next)) break
             }
             dispatchSticky(listener)
         }
 
         private fun dispatchSticky(listener: RegisteredListener<E>) {
-            if (listener.configuration.getOrDefault(Key.IGNORE_STICKY_EVENTS)) return
+            if (listener.configuration.ignoreStickyEvents) return
             for ((type, event) in stickyEvents) {
                 @Suppress("UNCHECKED_CAST")
                 event as E
 
                 if (!type.isSubclassOf(listener.type)) continue
 
-                if (listener.configuration.getOrDefault(Key.DISALLOW_SUBTYPES) && type != listener.type) continue
+                if (listener.configuration.disallowSubtypes && type != listener.type) continue
 
                 if (listener.isSuspend) {
                     scope.launch(Dispatchers.Unconfined) {
@@ -633,7 +633,7 @@ class DefaultEventManager internal constructor(
             val typedEvent = event as E
             var called = false
             for (handler in list) {
-                if (handler.configuration.getOrDefault(Key.DISALLOW_SUBTYPES)) {
+                if (handler.configuration.disallowSubtypes) {
                     if (typedEvent::class != handler.type) continue
                 }
                 if (event::class == handler.type && genericTypes.isNotEmpty() && handler is RegisteredKFunctionListener<E> && !handler.allowGenericTypes(
@@ -641,7 +641,7 @@ class DefaultEventManager internal constructor(
                     )
                 ) continue
 
-                val silent = handler.configuration.getOrDefault(Key.SILENT)
+                val silent = handler.configuration.silent
                 if (handler.isSuspend) {
                     scope.launch(Dispatchers.Unconfined) {
                         try {
@@ -670,13 +670,13 @@ class DefaultEventManager internal constructor(
             val typedEvent = event as E
             var called = false
             for (handler in list) {
-                if (handler.configuration.getOrDefault(Key.DISALLOW_SUBTYPES) && typedEvent::class != handler.type) continue
+                if (handler.configuration.disallowSubtypes && typedEvent::class != handler.type) continue
                 if (event::class == handler.type && genericTypes.isNotEmpty() && handler is RegisteredKFunctionListener<E> && !handler.allowGenericTypes(
                         genericTypes
                     )
                 ) continue
 
-                val silent = handler.configuration.getOrDefault(Key.SILENT)
+                val silent = handler.configuration.silent
                 try {
                     val success = if (handler.isSuspend) {
                         handler.invokeSuspend(typedEvent, isWaiting = true, isSticky = false)
@@ -709,7 +709,7 @@ class DefaultEventManager internal constructor(
 
         operator fun invoke(event: E, isSticky: Boolean): Boolean {
             if (isSuspend) throw UnsupportedOperationException("invoke is not supported for suspend functions.")
-            if (configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)) {
+            if (configuration.exclusiveListenerProcessing) {
                 if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return false
             }
             try {
@@ -721,7 +721,7 @@ class DefaultEventManager internal constructor(
         }
 
         suspend fun invokeSuspend(event: E, isWaiting: Boolean, isSticky: Boolean): Boolean {
-            if (configuration.getOrDefault(Key.EXCLUSIVE_LISTENER_PROCESSING)) {
+            if (configuration.exclusiveListenerProcessing) {
                 if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return false
             }
             try {
@@ -948,7 +948,7 @@ class DefaultEventManager internal constructor(
     private data object ConfigParameterResolver : InternalParameterResolver<EventConfiguration<*>> {
         override val name: String = "config"
         override val type = EventConfiguration::class
-        override val valueByConfiguration: EventConfiguration<*> = EventConfiguration.DEFAULT
+        override val valueByConfiguration: EventConfiguration<*> = EventConfiguration
     }
 
     private data object IsStickyParameterResolver : InternalParameterResolver<Boolean> {
