@@ -1,5 +1,6 @@
 package com.fantamomo.kevent
 
+import com.fantamomo.kevent.Key.Companion.PRIORITY
 import kotlin.reflect.KClass
 
 /**
@@ -95,6 +96,22 @@ data class Key<T>(val key: String, val type: KClass<T & Any>, val defaultValue: 
          * @see com.fantamomo.kevent.silent
          */
         val SILENT = Key<Boolean>("silent", false)
+
+        /**
+         * A key used to specify whether sticky events should be ignored in event handling.
+         *
+         * The `IGNORE_STICKY_EVENTS` key determines if handlers should bypass processing of
+         * previously posted "sticky" events. Sticky events are retained in memory after being
+         * dispatched, allowing new subscribers to immediately receive the latest sticky event.
+         * Enabling this key disables such behavior, ensuring only real-time events are processed.
+         *
+         * Default value: `false` (handlers will process sticky events by default).
+         *
+         * @see Key
+         * @see EventConfigurationScope.getOrDefault
+         * @since 1.3-SNAPSHOT
+         */
+        val IGNORE_STICKY_EVENTS = Key<Boolean>("ignoreStickyEvents", false)
 
         /**
          * Represents a debug-only key with a name identifier.
