@@ -3,12 +3,14 @@ package com.fantamomo.kevent
 import kotlin.reflect.KClass
 
 /**
- * Represents a base class for events in the event dispatch system.
+ * Base class for events within the event dispatch system.
  *
- * The `Event` class is an abstract subclass of `Dispatchable` that enables the creation
- * of specific event types. Any event in the system should inherit from this class.
- * It extends the functionality provided by the `Dispatchable` class to allow event handling
- * and dispatching within the system.
+ * `Event` is an abstract subclass of `Dispatchable` that provides a foundation
+ * for defining specific event types. Normally, developers should inherit from
+ * `Event` rather than directly from `Dispatchable`, unless there is a special
+ * reason to bypass the event-specific functionality.
+ *
+ * It extends `Dispatchable` to support event handling and dispatching within the framework.
  *
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
