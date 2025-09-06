@@ -14,7 +14,7 @@ package com.fantamomo.kevent.manager.config
  * @author Fantamomo
  * @since 1.9-SNAPSHOT
  */
-var DispatchConfigScope.dispatchDeadEvent: Boolean
+var DispatchConfigScope<*>.dispatchDeadEvent: Boolean
     get() = getOrDefault(DispatchConfigKey.DISPATCH_DEAD_EVENT)
     set(value) = set(DispatchConfigKey.DISPATCH_DEAD_EVENT, value)
 
@@ -32,6 +32,6 @@ var DispatchConfigScope.dispatchDeadEvent: Boolean
  * @author Fantamomo
  * @since 1.9-SNAPSHOT
  */
-var DispatchConfigScope.sticky: Boolean
+var DispatchConfigScope<*>.sticky: Boolean
     get() = getOrDefault(DispatchConfigKey.STICKY)
     set(value) = set(DispatchConfigKey.STICKY, value)
