@@ -391,6 +391,7 @@ There are 5 default injectable parameter:
   - when called with `dispatch` it is `false`
   - when called with `dispatchSuspend` it is `true`
 - `config: EventConfiguration<*>`: The configuration of the handler.
+- `isSticky: Boolean`: If the event is sticky. See [Sticky Events](#sticky-events).
 
 The following example disables `scope` and `logger`:
 
@@ -461,6 +462,34 @@ only `onMyEvent` is called.
 > the event manager currently **cannot** verify the generic type in this inheritance case.  
 > This means the listener for the parent event might still be called even if the generic type does not match.  
 > A solution for this is being worked on.
+
+---
+
+## Sticky Events
+
+A **sticky event** is an event stored in the manager and automatically delivered to all **newly registered** listeners.
+
+To mark an event as *sticky*, set the `sticky` property in the `DispatchConfig` class to `true`:
+
+```kotlin
+manager.dispatch(MyEvent(...)) {
+    sticky = true
+}
+
+// or
+
+val config = createDispatchConfig {
+    sticky = true
+}
+
+manager.dispatch(MyEvent(...), config)
+```
+
+When a new listener is registered, it will immediately receive the stored event.
+
+> Only the **most recent** sticky event of a given type is kept.
+
+There is also a new injectable parameter `isSticky: Boolean` that can be used to check whether an event is sticky.
 
 ---
 

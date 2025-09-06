@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.fantamomo"
-version = "1.9-SNAPSHOT"
+version = "1.10-SNAPSHOT"
 
 kotlin {
 

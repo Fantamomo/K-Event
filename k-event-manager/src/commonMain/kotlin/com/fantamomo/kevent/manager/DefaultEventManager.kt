@@ -349,7 +349,7 @@ class DefaultEventManager internal constructor(
         }
     }
 
-    override fun dispatch(event: Dispatchable, config: DispatchConfig) {
+    override fun <D : Dispatchable> dispatch(event: D, config: DispatchConfig<D>) {
         checkClosed()
         if (handlers.isEmpty()) return
         val eventClass = event::class
@@ -370,7 +370,7 @@ class DefaultEventManager internal constructor(
         }
     }
 
-    override suspend fun dispatchSuspend(event: Dispatchable, config: DispatchConfig) {
+    override suspend fun <D : Dispatchable> dispatchSuspend(event: D, config: DispatchConfig<D>) {
         checkClosed()
         val eventClass = event::class
         var called = false

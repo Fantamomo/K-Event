@@ -29,7 +29,7 @@ interface EventManager : HandlerEventScope {
      * @param event The event instance to be dispatched to the appropriate listeners.
      * @param config Configuration options for dispatching the event (e.g., sticky flag, DeadEvent behavior).
      */
-    fun dispatch(event: Dispatchable, config: DispatchConfig = DispatchConfig.EMPTY)
+    fun <D : Dispatchable> dispatch(event: D, config: DispatchConfig<D> = DispatchConfig.empty())
 
     /**
      * Dispatches an event to all registered event listeners asynchronously.
@@ -46,7 +46,7 @@ interface EventManager : HandlerEventScope {
      * @param event The event instance to be dispatched to the appropriate listeners.
      * @param config Configuration options for dispatching the event (e.g., sticky flag, DeadEvent behavior).
      */
-    suspend fun dispatchSuspend(event: Dispatchable, config: DispatchConfig = DispatchConfig.EMPTY)
+    suspend fun <D : Dispatchable> dispatchSuspend(event: D, config: DispatchConfig<D> = DispatchConfig.empty())
 
     /**
      * Clears all sticky events stored in the event manager.
