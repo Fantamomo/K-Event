@@ -552,6 +552,7 @@ class DefaultEventManager internal constructor(
         }
 
         private fun dispatchSticky(listener: RegisteredListener<E>) {
+            if (listener.configuration.getOrDefault(Key.IGNORE_STICKY_EVENTS)) return
             for ((type, event) in stickyEvents) {
                 @Suppress("UNCHECKED_CAST")
                 event as E
@@ -562,7 +563,7 @@ class DefaultEventManager internal constructor(
 
                 if (listener.isSuspend) {
                     scope.launch(Dispatchers.Unconfined) {
-                        listener.invokeSuspend(event, false, true)
+                        listener.invokeSuspend(event, isWaiting = false, isSticky = true)
                     }
                 } else {
                     listener.invoke(event, true)
@@ -644,7 +645,7 @@ class DefaultEventManager internal constructor(
                 if (handler.isSuspend) {
                     scope.launch(Dispatchers.Unconfined) {
                         try {
-                            handler.invokeSuspend(typedEvent, false, false)
+                            handler.invokeSuspend(typedEvent, isWaiting = false, isSticky = false)
                         } catch (e: Throwable) {
                             handleException(e, handler)
                         }
@@ -678,7 +679,7 @@ class DefaultEventManager internal constructor(
                 val silent = handler.configuration.getOrDefault(Key.SILENT)
                 try {
                     val success = if (handler.isSuspend) {
-                        handler.invokeSuspend(typedEvent, true, false)
+                        handler.invokeSuspend(typedEvent, isWaiting = true, isSticky = false)
                     } else {
                         handler.invoke(typedEvent, false)
                     }
