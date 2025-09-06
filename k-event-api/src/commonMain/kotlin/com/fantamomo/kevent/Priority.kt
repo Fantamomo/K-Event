@@ -1,16 +1,23 @@
 package com.fantamomo.kevent
 
+import com.fantamomo.kevent.Priority.Companion.HIGH
+import com.fantamomo.kevent.Priority.Companion.HIGHEST
+import com.fantamomo.kevent.Priority.Companion.LOW
+import com.fantamomo.kevent.Priority.Companion.LOWEST
+import com.fantamomo.kevent.Priority.Companion.MONITOR
+import com.fantamomo.kevent.Priority.Companion.NORMAL
+
+
 /**
  * Represents the priority of an event handler.
- * 
- * Priorities determine the order in which event handlers are executed when an event
- * is dispatched. Handlers with higher priority values are executed before those with
- * lower priority values.
- * 
- * The event system provides standard priorities ([HIGHEST], [HIGH], [NORMAL], [LOW], [LOWEST]),
- * but also allows for custom priorities with any integer value.
- * 
- * Example usage:
+ *
+ * Priorities determine the execution order of event handlers when an event is dispatched.
+ * Handlers with higher priority values are executed before those with lower values.
+ *
+ * The system provides standard priorities ([HIGHEST], [HIGH], [NORMAL], [LOW], [LOWEST], [MONITOR])
+ * and also supports custom priorities with arbitrary integer values.
+ *
+ * Example:
  * ```
  * @Register
  * fun onMyEvent(event: MyEvent?) {
@@ -21,83 +28,62 @@ package com.fantamomo.kevent
  *     }
  * }
  * ```
- * 
- * @property priority The integer value of this priority
- * 
+ *
+ * @property priority The integer value of this priority.
  * @see EventConfigurationScope.priority
  *
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
 sealed interface Priority : Comparable<Priority> {
+
     /**
-     * The integer value of this priority.
-     * 
-     * Higher values indicate higher priority (executed earlier).
+     * The integer value representing this priority.
+     *
+     * Higher values indicate higher priority and earlier execution.
      */
     val priority: Int
 
     /**
      * Compares this priority with another based on their integer values.
-     * 
-     * @param other The priority to compare with
-     * @return A negative value if this priority is lower, zero if they are equal,
-     *         or a positive value if this priority is higher
+     *
+     * @param other The priority to compare with.
+     * @return Negative if lower, zero if equal, positive if higher.
      */
     override fun compareTo(other: Priority) = priority.compareTo(other.priority)
 
     /**
-     * Standard predefined priorities.
-     * 
-     * This sealed class contains commonly used priority levels as singleton objects.
-     * 
-     * @property priority The integer value of this priority
+     * Standard predefined priorities as singleton objects.
+     *
+     * Includes commonly used levels: HIGHEST, HIGH, NORMAL, LOW, LOWEST, MONITOR.
      */
     sealed class Standard(override val priority: Int) : Priority {
+
         /**
-         * The name of this standard priority.
+         * The name of this standard priority (class simple name).
          */
         val name: String by lazy { this::class.simpleName!! }
 
         override fun equals(other: Any?) = other is Priority && other.priority == priority
-
         override fun hashCode() = priority
-
         override fun toString() = name
 
-        /**
-         * Highest priority level (1000).
-         * Event handlers with this priority are executed first.
-         */
+        /** Highest priority (1000). Executed first. */
         object HIGHEST : Standard(1000)
 
-        /**
-         * High priority level (500).
-         */
+        /** High priority (500). */
         object HIGH : Standard(500)
 
-        /**
-         * Normal priority level (0).
-         * This is the default priority if none is specified.
-         */
+        /** Normal priority (0). Default if none specified. */
         object NORMAL : Standard(0)
 
-        /**
-         * Low priority level (-500).
-         */
+        /** Low priority (-500). */
         object LOW : Standard(-500)
 
-        /**
-         * Lowest priority level (-1000).
-         * Event handlers with this priority are executed last (except for MONITOR).
-         */
+        /** Lowest priority (-1000). Executed last (except MONITOR). */
         object LOWEST : Standard(-1000)
 
-        /**
-         * Monitor priority level (Int.MIN_VALUE).
-         * Event handlers with this priority are executed after all others and
-         * are typically used for monitoring or logging purposes.
-         */
+        /** Monitor priority (Int.MIN_VALUE). Executed after all others, for logging/monitoring. */
         object MONITOR : Standard(Int.MIN_VALUE)
 
         companion object {
@@ -105,19 +91,19 @@ sealed interface Priority : Comparable<Priority> {
             private val BY_PRIORITY by lazy { entries.associateBy(Standard::priority) }
 
             /**
-             * Finds a standard priority with the given integer value.
-             * 
-             * @param priority The integer value to look up
-             * @return The standard priority with the given value, or null if none exists
+             * Returns a standard priority matching the given integer value.
+             *
+             * @param priority The integer value to look up.
+             * @return Corresponding standard priority or null if none exists.
              */
             fun fromPriority(priority: Int) = BY_PRIORITY[priority]
 
             /**
-             * Finds a standard priority with the given name.
-             * 
-             * @param value The name of the priority to look up
-             * @return The standard priority with the given name
-             * @throws IllegalArgumentException if no standard priority with the given name exists
+             * Returns a standard priority matching the given name.
+             *
+             * @param value The name of the priority.
+             * @return Corresponding standard priority.
+             * @throws IllegalArgumentException if no standard priority matches the name.
              */
             fun valueOf(value: String) = when (value) {
                 "HIGHEST" -> HIGHEST
@@ -133,12 +119,10 @@ sealed interface Priority : Comparable<Priority> {
 
     /**
      * Custom priority with a user-defined integer value.
-     * 
-     * This class allows for creating priorities with any integer value,
-     * providing more fine-grained control over execution order than the
-     * standard priorities.
-     * 
-     * @property priority The integer value of this priority
+     *
+     * Allows fine-grained control beyond standard priorities.
+     *
+     * @property priority The integer value of this priority.
      */
     data class Custom(override val priority: Int) : Priority {
         override fun equals(other: Any?) = other is Priority && other.priority == priority
@@ -148,48 +132,30 @@ sealed interface Priority : Comparable<Priority> {
     companion object {
         /**
          * Creates a priority with the given integer value.
-         * 
-         * If the value matches a standard priority, that standard priority is returned.
-         * Otherwise, a new custom priority is created.
-         * 
-         * @param priority The integer value for the priority
-         * @return A priority with the given value
+         *
+         * Returns a standard priority if it matches the value, otherwise creates a custom one.
+         *
+         * @param priority The integer value for the priority.
+         * @return A [Priority] instance corresponding to the value.
          */
         operator fun invoke(priority: Int): Priority = Standard.fromPriority(priority) ?: Custom(priority)
 
-        /**
-         * Highest priority level (1000).
-         * Event handlers with this priority are executed first.
-         */
+        /** Highest priority (1000). Executed first. */
         val HIGHEST = Standard.HIGHEST
 
-        /**
-         * High priority level (500).
-         */
+        /** High priority (500). */
         val HIGH = Standard.HIGH
 
-        /**
-         * Normal priority level (0).
-         * This is the default priority if none is specified.
-         */
+        /** Normal priority (0). Default. */
         val NORMAL = Standard.NORMAL
 
-        /**
-         * Low priority level (-500).
-         */
+        /** Low priority (-500). */
         val LOW = Standard.LOW
 
-        /**
-         * Lowest priority level (-1000).
-         * Event handlers with this priority are executed last (except for MONITOR).
-         */
+        /** Lowest priority (-1000). Executed last (except MONITOR). */
         val LOWEST = Standard.LOWEST
 
-        /**
-         * Monitor priority level (Int.MIN_VALUE).
-         * Event handlers with this priority are executed after all others and
-         * are typically used for monitoring or logging purposes.
-         */
+        /** Monitor priority (Int.MIN_VALUE). Executed after all others. */
         val MONITOR = Standard.MONITOR
     }
 }

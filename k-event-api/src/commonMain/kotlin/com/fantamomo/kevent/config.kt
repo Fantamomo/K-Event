@@ -7,40 +7,41 @@ import kotlin.jvm.JvmSynthetic
 
 /**
  * Configures an event handler with custom options.
- * 
- * This function serves two purposes in the event system:
- * 
- * 1. **Initialization phase**: When called with `event = null` during registration,
- *    it creates an [EventConfigurationScope], applies the configuration [block],
- *    and throws an [EventConfigurationHolder] exception containing the configuration.
- *    This exception is caught by the registration system to extract the configuration.
- * 
- * 2. **Runtime phase**: When called with a non-null event during normal execution,
- *    it simply verifies the event is non-null and returns, allowing the rest of the
- *    handler method to execute with the guarantee that `event` is not null.
- * 
- * The function uses Kotlin contracts to inform the compiler that if this function
- * returns normally (without throwing an exception), then `event` is guaranteed to be
- * non-null in the following code.
- * 
- * Example usage:
- * ```
+ *
+ * This function plays two distinct roles in the event system:
+ *
+ * 1. **Initialization phase**
+ *    When called with `event = null` (during handler registration), it creates an
+ *    [EventConfigurationScope], executes the given [block], and throws a
+ *    [ConfigurationCapturedException] containing the resulting [EventConfiguration].
+ *    The registration system catches this exception to extract and store the configuration.
+ *
+ * 2. **Runtime phase**
+ *    When called with a non-null event during normal execution, the function simply verifies
+ *    that the event is non-null and then returns. From this point forward, the compiler
+ *    and the developer can treat `event` as non-null.
+ *
+ * ### Example
+ * ```kotlin
  * @Register
  * fun onMyEvent(event: MyEvent?) {
  *     configuration(event) {
  *         priority = Priority.HIGH
- *         // Other configuration options
+ *         // other configuration options
  *     }
- *     
- *     // At this point, event is guaranteed to be non-null
+ *
+ *     // At this point, `event` is guaranteed to be non-null
  *     println(event.someProperty)
  * }
  * ```
- * 
- * @param event The event being handled, which may be null during initialization
- * @param block A configuration block that sets options for this event handler
- * @throws ConfigurationCapturedException during initialization to pass configuration data
- * 
+ *
+ * Kotlin contracts are used so the compiler knows:
+ * if this function returns normally (without throwing), then `event` is guaranteed non-null.
+ *
+ * @param event The event being handled. May be `null` during registration, never `null` at runtime.
+ * @param block A DSL block for customizing the event handler’s configuration.
+ * @throws ConfigurationCapturedException During registration, carrying the captured configuration.
+ *
  * @see EventConfigurationScope
  * @see ConfigurationCapturedException
  *
@@ -62,44 +63,44 @@ inline fun <E : Dispatchable> configuration(event: E?, @EventDsl block: EventCon
 
 /**
  * Configures an event handler with default options.
- * 
- * This function is similar to [configuration] but doesn't require a configuration block.
- * It's used when the event handler doesn't need any custom configuration and can use
- * the default settings.
- * 
- * Like [configuration], this function serves two purposes:
- * 
- * 1. **Initialization phase**: When called with `event = null`, it throws an
- *    [EventConfigurationHolder] with default configuration.
- * 
- * 2. **Runtime phase**: When called with a non-null event, it simply verifies the
- *    event is non-null and returns.
- * 
- * Example usage:
- * ```
+ *
+ * This function is a shorthand alternative to [configuration] when no custom
+ * options are required. It applies the default [EventConfiguration].
+ *
+ * Like [configuration], it behaves differently depending on the phase:
+ *
+ * 1. **Initialization phase**
+ *    If `event = null`, it throws a [ConfigurationCapturedException] containing
+ *    the default configuration.
+ *
+ * 2. **Runtime phase**
+ *    If `event` is non-null, the function simply returns, guaranteeing the event is safe to use.
+ *
+ * ### Example
+ * ```kotlin
  * @Register
  * fun onMyEvent(event: MyEvent?) {
  *     emptyConfiguration(event)
- *     
- *     // At this point, event is guaranteed to be non-null
- *     println(event.someProperty)
+ *     println(event.someProperty) // event is guaranteed non-null
  * }
  * ```
  *
- * The next example does the same as above:
- * ```
+ * Equivalent and more idiomatic alternative:
+ * ```kotlin
  * @Register
- * fun onMyEvent(event: MyEvent?) {
- *
+ * fun onMyEvent(event: MyEvent) {
  *     println(event.someProperty)
  * }
  * ```
  *
- * You can remove the `emptyConfiguration` call when you make the parameter non-null.
- * 
- * @param event The event being handled, which may be null during initialization
- * @throws ConfigurationCapturedException during initialization to pass default configuration data
- * 
+ * ### Recommendation
+ * Prefer non-nullable event parameters in handler signatures whenever possible.
+ * Use [emptyConfiguration] when you want explicit configuration, but in most cases
+ * a non-null parameter makes the code cleaner.
+ *
+ * @param event The event being handled. May be `null` during registration.
+ * @throws ConfigurationCapturedException During registration, carrying the default configuration.
+ *
  * @see configuration
  * @see ConfigurationCapturedException
  *
@@ -112,28 +113,22 @@ inline fun <E : Dispatchable> configuration(event: E?, @EventDsl block: EventCon
 @JvmSynthetic
 inline fun emptyConfiguration(event: Dispatchable?) {
     contract { returns() implies (event != null) }
-    if (event == null) throw ConfigurationCapturedException(EventConfiguration.DEFAULT)
+    if (event == null) throw ConfigurationCapturedException(EventConfiguration)
 }
 
 /**
- * Throws a [ConfigurationCapturedException] encapsulating the event configuration defined
- * in the provided DSL block.
+ * Throws a [ConfigurationCapturedException] encapsulating the event configuration
+ * defined in the provided DSL block.
  *
- * This method is primarily used in the event system for capturing the event configuration
- * during the initialization process. The configuration is specified within the scope of
- * the [EventConfigurationScope], using a DSL syntax. When invoked, this method executes
- * the given block, encapsulates the resulting configuration in a [ConfigurationCapturedException],
- * and throws it. This exception is later caught by the event registration system to extract
- * and associate the configuration with the respective event handler.
+ * This function is used during the initialization phase to capture a handler’s
+ * configuration. The [block] is executed inside an [EventConfigurationScope],
+ * producing an [EventConfiguration]. That configuration is then wrapped in a
+ * [ConfigurationCapturedException] and thrown, so the registration system can
+ * intercept and store it.
  *
- * @param block The DSL block defining the event configuration. The block is executed
- *              within an instance of [EventConfigurationScope] specific to the event type [E].
- * @return This method does not return a value as it always throws a [ConfigurationCapturedException].
- * @throws ConfigurationCapturedException This exception is thrown carrying the configuration data
- *                                         created within the provided [block].
- *
- * @author Fantamomo
- * @since 1.1-SNAPSHOT
+ * @param block A DSL block executed inside an [EventConfigurationScope] that defines
+ *              the handler’s configuration.
+ * @throws ConfigurationCapturedException Always thrown with the configuration result.
  */
 @Throws(ConfigurationCapturedException::class)
 @OptIn(ExperimentalContracts::class)
@@ -146,15 +141,14 @@ inline fun <E : Dispatchable> throwConfigurationScope(block: @EventDsl EventConf
 }
 
 /**
- * Creates a configuration scope for an event and applies the given configuration block.
+ * Creates an [EventConfiguration] by applying a DSL block to a new [EventConfigurationScope].
  *
- * This function initializes an [EventConfigurationScope], executes the provided
- * configuration [block] within that scope, and then returns an [EventConfiguration]
- * containing the configured data.
+ * This function is the core builder for configurations. It instantiates a fresh
+ * [EventConfigurationScope], runs the given [block] against it, and then produces
+ * a finalized [EventConfiguration].
  *
- * @param block A lambda that defines the configuration for the event. The block
- *              is executed with the newly created [EventConfigurationScope] as the receiver.
- * @return An [EventConfiguration] containing the configuration data set within the scope.
+ * @param block A DSL block executed with a new [EventConfigurationScope] as its receiver.
+ * @return The resulting [EventConfiguration] containing the applied settings.
  *
  * @see configuration
  *
