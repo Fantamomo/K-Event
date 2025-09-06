@@ -1,18 +1,16 @@
 package com.fantamomo.kevent
 
 /**
- * DSL marker annotation for the event configuration DSL.
+ * DSL marker for the event configuration DSL.
  *
- * This annotation is used to mark the event configuration DSL, which helps the Kotlin
- * compiler enforce proper scoping rules for the DSL. It prevents implicit access to
- * outer receiver scopes, making the DSL safer and more predictable.
+ * Marks the event configuration DSL to help the Kotlin compiler enforce proper scoping rules.
+ * This prevents implicit access to outer receiver scopes, making the DSL safer and more predictable.
  *
- * When a function parameter is marked with this annotation (like the `block` parameter
- * in the [configuration] function), the Kotlin compiler ensures that within that block,
- * only members of the immediate receiver are accessible without explicit qualification.
+ * When applied to a function parameter (e.g., the `block` parameter in the [configuration] function),
+ * the compiler ensures that only members of the immediate receiver are accessible within that block
+ * without explicit qualification.
  *
- * This is particularly important for nested DSL blocks, where it prevents accidental
- * access to members of outer scopes.
+ * This is especially useful for nested DSL blocks, preventing accidental access to members of outer scopes.
  *
  * @see configuration
  * @see EventConfigurationScope
