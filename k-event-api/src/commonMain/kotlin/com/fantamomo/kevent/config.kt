@@ -89,7 +89,7 @@ inline fun <E : Dispatchable> configuration(event: E?, @EventDsl block: EventCon
  * The next example does the same as above:
  * ```
  * @Register
- * fun onMyEvent(event: MyEvent?) {
+ * fun onMyEvent(event: MyEvent) {
  *
  *     println(event.someProperty)
  * }
@@ -112,7 +112,7 @@ inline fun <E : Dispatchable> configuration(event: E?, @EventDsl block: EventCon
 @JvmSynthetic
 inline fun emptyConfiguration(event: Dispatchable?) {
     contract { returns() implies (event != null) }
-    if (event == null) throw ConfigurationCapturedException(EventConfiguration.DEFAULT)
+    if (event == null) throw ConfigurationCapturedException(EventConfiguration)
 }
 
 /**
