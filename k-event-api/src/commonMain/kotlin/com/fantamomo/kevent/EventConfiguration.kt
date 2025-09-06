@@ -3,10 +3,10 @@ package com.fantamomo.kevent
 /**
  * Immutable container for event handler configuration data.
  *
- * This interface defines the API for accessing event configuration.
- * It is sealed so all implementations are known at compile time.
+ * Defines the API for accessing event configuration.
+ * This interface is sealed.
  *
- * @param E The type of event this configuration applies to
+ * @param E The type of event this configuration applies to.
  *
  * @see EventConfigurationScope
  * @see Key
@@ -14,32 +14,34 @@ package com.fantamomo.kevent
 sealed interface EventConfiguration<E : Dispatchable> {
 
     /**
-     * Gets the value associated with the specified key, or null if no value is set.
+     * Returns the value associated with the specified key, or `null` if no value is set.
      */
     operator fun <T> get(key: Key<T>): T?
 
     /**
-     * Gets the value associated with the specified key, or the key's default value if none is set.
+     * Returns the value associated with the specified key, or the key's default value if none is set.
      */
     fun <T> getOrDefault(key: Key<T>): T
 
     /**
-     * Gets the non-null value associated with the specified key.
+     * Returns the non-null value associated with the specified key.
+     *
+     * @throws IllegalStateException if no value is set for the key
      */
     fun <T : Any> getValue(key: Key<T>): T
 
     /**
-     * Checks if the key exists in the configuration.
+     * Checks if the configuration contains a value for the specified key.
      */
     operator fun contains(key: Key<*>): Boolean
 
     /**
-     * Whether the configuration contains no entries.
+     * Returns `true` if the configuration contains no entries.
      */
     fun isEmpty(): Boolean
 
     /**
-     * Number of entries in the configuration.
+     * Returns the number of entries in the configuration.
      */
     val size: Int
 
@@ -56,7 +58,8 @@ sealed interface EventConfiguration<E : Dispatchable> {
 
         override fun <T> getOrDefault(key: Key<T>) = key.defaultValue
 
-        override fun <T : Any> getValue(key: Key<T>) = throw IllegalStateException("Empty configuration has no value for key $key")
+        override fun <T : Any> getValue(key: Key<T>) =
+            throw IllegalStateException("Empty configuration has no value for key $key")
 
         override fun contains(key: Key<*>) = false
 
@@ -67,6 +70,9 @@ sealed interface EventConfiguration<E : Dispatchable> {
 
     /**
      * Default immutable implementation of [EventConfiguration].
+     *
+     * Stores configuration entries in a map and provides access methods.
+     *
      * @author Fantamomo
      * @since 1.4-SNAPSHOT
      */
