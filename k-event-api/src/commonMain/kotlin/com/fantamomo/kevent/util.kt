@@ -5,13 +5,44 @@ import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 
+/**
+ * A type-safe map of key-value pairs representing the configuration data
+ * associated with an event handler. This is a property extension on
+ * [EventConfiguration], enabling access to the underlying configuration
+ * data in the form of a [Map].
+ *
+ * This property is internally used to retrieve the configuration data
+ * from an [EventConfigurationImpl], if available. If the instance is not
+ * of type [EventConfigurationImpl], an empty map is returned.
+ *
+ * @receiver The event configuration instance to retrieve data from.
+ * @return A map of key-value pairs representing the configuration data.
+ * If the event configuration instance is not an [EventConfigurationImpl],
+ * an empty map is returned.
+ * @author Fantamomo
+ * @since 1.5-SNAPSHOT
+ */
 @PublishedApi
 internal val EventConfiguration<*>.data: Map<Key<*>, Any?>
     get() = (this as? EventConfigurationImpl)?.data ?: emptyMap()
 
+/**
+ * Provides a mutable version of the current event configuration's data.
+ *
+ * This property creates a mutable map from the underlying immutable configuration data.
+ * It facilitates operations or transformations where mutability of the data is required.
+ *
+ * The returned map is a copy of the original configuration data, ensuring that changes to
+ * the mutable map do not affect the original immutable configuration.
+ *
+ * This property is internal and is primarily intended for use within library internals
+ * or advanced scenarios requiring direct manipulation of configuration data.
+ * @author Fantamomo
+ * @since 1.5-SNAPSHOT
+ */
 @PublishedApi
-internal val EventConfiguration<*>.mutableData: MutableMap<Key<*>, Any?>
-    get() = (this as? EventConfigurationImpl)?.data?.toMutableMap() ?: mutableMapOf()
+internal inline val EventConfiguration<*>.mutableData: MutableMap<Key<*>, Any?>
+    get() = data.toMutableMap()
 
 /**
  * Adds the specified `key` and `value` to the event configuration only if the key is not already present.
