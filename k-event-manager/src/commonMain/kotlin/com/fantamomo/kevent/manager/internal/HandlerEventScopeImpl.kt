@@ -29,13 +29,7 @@ class HandlerEventScopeImpl(val parent: HandlerEventScope) : HandlerEventScope {
         parent.register(listener)
     }
 
-    override fun register(listener: SimpleListener<*>) {
-        checkClosed()
-        listeners.add(listener)
-        parent.register(listener)
-    }
-
-    override fun register(listener: SimpleSuspendListener<*>) {
+    override fun register(listener: SimpleConfiguration<*>) {
         checkClosed()
         listeners.add(listener)
         parent.register(listener)
@@ -47,13 +41,7 @@ class HandlerEventScopeImpl(val parent: HandlerEventScope) : HandlerEventScope {
         parent.unregister(listener)
     }
 
-    override fun unregister(listener: SimpleListener<*>) {
-        checkClosed()
-        listeners.remove(listener)
-        parent.unregister(listener)
-    }
-
-    override fun unregister(listener: SimpleSuspendListener<*>) {
+    override fun unregister(listener: SimpleConfiguration<*>) {
         checkClosed()
         listeners.remove(listener)
         parent.unregister(listener)
