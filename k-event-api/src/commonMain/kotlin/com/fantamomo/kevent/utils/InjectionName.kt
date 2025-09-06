@@ -1,16 +1,15 @@
 package com.fantamomo.kevent.utils
 
-
 /**
- * This annotation allows overriding the injection name of a parameter when applied.
- * By default, the parameter name is used as the injection name.
- * This provides the ability to assign
- * a different name to the injected value than the parameter name.
+ * Annotation for overriding the default injection name of a parameter.
  *
- * It is solely used for parameter injection of custom values within listener
- * methods.
+ * By default, the parameter’s own name is used as its injection name.
+ * This annotation allows specifying a custom name, so the injected value
+ * can be bound to a different name than the parameter itself.
  *
- * @property value The custom injection name to be used for the parameter.
+ * It is only used for parameter injection of custom values in listener methods.
+ *
+ * @property value The custom injection name assigned to the parameter.
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
