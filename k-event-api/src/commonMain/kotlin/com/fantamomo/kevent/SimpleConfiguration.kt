@@ -13,7 +13,7 @@ import kotlin.reflect.KClass
  * @author Fantamomo
  * @since 1.6-SNAPSHOT
  */
-sealed interface SimpleConfiguration<E : Dispatchable> {
+sealed interface SimpleConfiguration<E : KEventElement> {
 
     /**
      * The type of event handled by this listener.
