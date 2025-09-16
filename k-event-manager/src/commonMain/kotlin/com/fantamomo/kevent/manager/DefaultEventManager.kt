@@ -36,7 +36,7 @@ class DefaultEventManager internal constructor(
 ) : EventManager {
 
     // Maps event types to their handler collections
-    private val handlers: ConcurrentHashMap<KClass<out Dispatchable>, HandlerBucket<out Dispatchable>> =
+    private val handlers: ConcurrentHashMap<KClass<out KEventElement>, HandlerBucket<out KEventElement>> =
         ConcurrentHashMap()
 
     // Stores last dispatched "sticky" events so late listeners can still receive them
@@ -227,9 +227,9 @@ class DefaultEventManager internal constructor(
                 }
             }
 
-            // Verify second parameter type is a Dispatchable event
+            // Verify second parameter type is a KEventElement
             val eventClass = parameters[1].type.classifier as? KClass<*> ?: continue
-            if (!Dispatchable::class.isSuperclassOf(eventClass)) {
+            if (!KEventElement::class.isSuperclassOf(eventClass)) {
                 exceptionHandler("onMethodHasNoDispatchableParameter") {
                     onMethodHasNoDispatchableParameter(listener, method, parameters[1].type)
                 }
@@ -237,7 +237,7 @@ class DefaultEventManager internal constructor(
             }
 
             @Suppress("UNCHECKED_CAST")
-            val typedEventClass = eventClass as KClass<Dispatchable>
+            val typedEventClass = eventClass as KClass<KEventElement>
 
             // Prepare arguments for capturing config if nullable
             val args = method.parameters.map { param ->
@@ -248,7 +248,7 @@ class DefaultEventManager internal constructor(
                 }
             }
 
-            val defaultConfigOrCaptured: EventConfiguration<Dispatchable>? =
+            val defaultConfigOrCaptured: EventConfiguration<KEventElement>? =
                 if (!parameters[1].type.isMarkedNullable) {
                     EventConfiguration.default()
                 } else {
@@ -288,7 +288,7 @@ class DefaultEventManager internal constructor(
                             null
                         } else {
                             @Suppress("UNCHECKED_CAST")
-                            config as EventConfiguration<Dispatchable>
+                            config as EventConfiguration<KEventElement>
                         }
                     } catch (t: Throwable) {
                         t.rethrowIfFatal()
@@ -329,7 +329,7 @@ class DefaultEventManager internal constructor(
                 is SimpleListener<*> -> RegisteredSimpleListener(this, listener)
                 is SimpleSuspendListener<*> -> RegisteredSimpleSuspendListener(this, listener)
             }
-            val registered = simpleListener as RegisteredListener<Dispatchable>
+            val registered = simpleListener as RegisteredListener<KEventElement>
             getOrCreateHandlerBucket(registered.type).add(registered)
         } catch (e: NoResolverException) {
             exceptionHandler("onParameterHasNoResolver") { onParameterHasNoResolver(listener, e.name, e.type) }
@@ -394,7 +394,7 @@ class DefaultEventManager internal constructor(
         stickyEvents.remove(clazz)
     }
 
-    override fun <E : Dispatchable> register(
+    override fun <E : KEventElement> register(
         event: KClass<E>,
         configuration: EventConfiguration<E>,
         handler: (E) -> Unit,
@@ -414,7 +414,7 @@ class DefaultEventManager internal constructor(
         }
     }
 
-    override fun <E : Dispatchable> registerSuspend(
+    override fun <E : KEventElement> registerSuspend(
         event: KClass<E>,
         configuration: EventConfiguration<E>,
         handler: suspend (E) -> Unit,
@@ -505,7 +505,7 @@ class DefaultEventManager internal constructor(
         }
     }
 
-    private fun <E : Dispatchable> getOrCreateHandlerBucket(type: KClass<E>): HandlerBucket<E> {
+    private fun <E : KEventElement> getOrCreateHandlerBucket(type: KClass<E>): HandlerBucket<E> {
         @Suppress("UNCHECKED_CAST")
         return handlers.computeIfAbsent(type) { HandlerBucket<E>() } as HandlerBucket<E>
     }
@@ -544,7 +544,7 @@ class DefaultEventManager internal constructor(
     // -------------
     // HandlerBucket
     // -------------
-    private inner class HandlerBucket<E : Dispatchable> {
+    private inner class HandlerBucket<E : KEventElement> {
 
         // Holds the current list of registered listeners atomically (thread-safe)
         private val snapshot: AtomicReference<List<RegisteredListener<E>>> = AtomicReference(emptyList())
@@ -722,7 +722,7 @@ class DefaultEventManager internal constructor(
     // --------------------
     // Registered Listeners
     // --------------------
-    private sealed class RegisteredListener<E : Dispatchable>(
+    private sealed class RegisteredListener<E : KEventElement>(
         val type: KClass<E>,
         val configuration: EventConfiguration<E>,
         val manager: DefaultEventManager,
@@ -735,6 +735,7 @@ class DefaultEventManager internal constructor(
 
         /** Operator function to invoke the listener for non-suspend events */
         operator fun invoke(event: E, isSticky: Boolean): Boolean {
+            require(event is Dispatchable) { "event must be a subtype of Dispatchable" }
             if (isSuspend) throw UnsupportedOperationException(
                 "invoke is not supported for suspend functions."
             )
@@ -756,6 +757,7 @@ class DefaultEventManager internal constructor(
 
         /** Suspend version of invoke, for asynchronous listeners */
         suspend fun invokeSuspend(event: E, isWaiting: Boolean, isSticky: Boolean): Boolean {
+            require(event is Dispatchable) { "event must be a subtype of Dispatchable" }
             // If exclusive execution is enabled, try to acquire the lock
             if (configuration.exclusiveListenerProcessing) {
                 if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return false
@@ -785,7 +787,7 @@ class DefaultEventManager internal constructor(
         protected abstract fun invokeInternal(event: E, isSticky: Boolean)
     }
 
-    private class RegisteredFunctionListener<E : Dispatchable>(
+    private class RegisteredFunctionListener<E : KEventElement>(
         type: KClass<E>,
         val method: (E) -> Unit,
         configuration: EventConfiguration<E>,
@@ -799,7 +801,7 @@ class DefaultEventManager internal constructor(
         }
     }
 
-    private class RegisteredSuspendFunctionListener<E : Dispatchable>(
+    private class RegisteredSuspendFunctionListener<E : KEventElement>(
         type: KClass<E>,
         configuration: EventConfiguration<E>,
         manager: DefaultEventManager,
@@ -818,7 +820,7 @@ class DefaultEventManager internal constructor(
         }
     }
 
-    private class RegisteredKFunctionListener<E : Dispatchable>(
+    private class RegisteredKFunctionListener<E : KEventElement>(
         type: KClass<E>,
         val listener: Listener,
         val kFunction: KFunction<*>,
@@ -848,10 +850,10 @@ class DefaultEventManager internal constructor(
 
         @Suppress("UNCHECKED_CAST")
         /** Strategies for resolving additional parameters beyond the listener and event */
-        private val extraStrategies: Array<ArgStrategy<E>> by lazy {
+        private val extraStrategies: Array<ArgStrategy<out Dispatchable>> by lazy {
             kFunction.parameters.drop(2) // Skip first two (listener, event)
                 .map { param ->
-                    resolvers[param].toStrategy(this) // Create resolution strategy for each extra parameter
+                    resolvers[param].toStrategy(this as RegisteredKFunctionListener<Dispatchable>) // Create resolution strategy for each extra parameter
                 }
                 .toTypedArray()
         }
@@ -882,12 +884,14 @@ class DefaultEventManager internal constructor(
 
         /** Builds the full argument array for the function call */
         private fun buildArgs(event: E, isWaiting: Boolean, isSticky: Boolean): Array<Any?> {
+            require(event is Dispatchable) { "event is not a subtype of Dispatchable" }
             val args = arrayOfNulls<Any?>(2 + extraStrategies.size)
             args[0] = listener // First parameter: listener instance
             args[1] = event    // Second parameter: event
             // Fill in any additional resolved parameters
             for (i in extraStrategies.indices) {
-                args[i + 2] = extraStrategies[i].resolve(event, isWaiting, isSticky)
+                @Suppress("UNCHECKED_CAST")
+                args[i + 2] = (extraStrategies[i] as ArgStrategy<Dispatchable>).resolve(event, isWaiting, isSticky)
             }
             return args
         }
@@ -916,7 +920,7 @@ class DefaultEventManager internal constructor(
     }
 
     @Suppress("UNCHECKED_CAST")
-    private class RegisteredSimpleListener<E : Dispatchable>(
+    private class RegisteredSimpleListener<E : KEventElement>(
         manager: DefaultEventManager,
         val simpleListener: SimpleListener<E>,
     ) : RegisteredListener<E>(
@@ -925,22 +929,22 @@ class DefaultEventManager internal constructor(
         manager
     ) {
         private val args = simpleListener.args()
-        private val resolvers: Map<String, ArgStrategy<E>> = args.map { arg ->
+        private val resolvers: Map<String, ArgStrategy<Dispatchable>> = args.map { arg ->
             arg.key to (manager.parameterResolver
                 .find { it.name == arg.key && it.type == arg.value }
                 ?: throw NoResolverException(arg.key, arg.value)
-                    ).toStrategy(this)
+                    ).toStrategy(this as RegisteredSimpleListener<Dispatchable>)
         }.toMap()
 
         override fun invokeInternal(event: E, isSticky: Boolean) {
-            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event, true, isSticky) })
+            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event as Dispatchable, true, isSticky) })
         }
 
         override val handlerId: String = "RegisteredSimpleListener@${type.jvmName}@${simpleListener.hashCode()}"
     }
 
     @Suppress("UNCHECKED_CAST")
-    private class RegisteredSimpleSuspendListener<E : Dispatchable>(
+    private class RegisteredSimpleSuspendListener<E : KEventElement>(
         manager: DefaultEventManager,
         val simpleListener: SimpleSuspendListener<E>,
     ) : RegisteredListener<E>(
@@ -949,11 +953,11 @@ class DefaultEventManager internal constructor(
         manager
     ) {
         private val args = simpleListener.args()
-        private val resolvers: Map<String, ArgStrategy<E>> = args.map { arg ->
+        private val resolvers: Map<String, ArgStrategy<Dispatchable>> = args.map { arg ->
             arg.key to (manager.parameterResolver
                 .find { it.name == arg.key && it.type == arg.value }
                 ?: throw NoResolverException(arg.key, arg.value)
-                    ).toStrategy(this)
+                    ).toStrategy(this as RegisteredSimpleSuspendListener<Dispatchable>)
         }.toMap()
 
         override fun invokeInternal(event: E, isSticky: Boolean) {
@@ -965,7 +969,7 @@ class DefaultEventManager internal constructor(
         override val isSuspend: Boolean = true
 
         override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean, isSticky: Boolean) {
-            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event, isWaiting, isSticky) })
+            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event as Dispatchable, isWaiting, isSticky) })
         }
     }
 
