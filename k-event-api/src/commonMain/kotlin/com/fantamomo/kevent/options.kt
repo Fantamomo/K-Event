@@ -10,7 +10,7 @@ package com.fantamomo.kevent
  * @param D The type of [Dispatchable] the configuration applies to.
  * @since 1.0-SNAPSHOT
  */
-private inline val <D : Dispatchable> EventConfigurationScope<D>.internal
+private inline val <D : KEventElement> EventConfigurationScope<D>.internal
     get() = this as EventConfiguration<D>
 
 /**

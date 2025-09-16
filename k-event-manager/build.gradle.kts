@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.fantamomo"
-version = "1.14-SNAPSHOT"
+version = "1.15-SNAPSHOT"
 
 kotlin {
 
@@ -15,7 +15,7 @@ kotlin {
             dependencies {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
                 implementation(project(":k-event-api"))
-                implementation("org.jetbrains.kotlin:kotlin-reflect")
+                implementation("org.jetbrains.kotlin:kotlin-reflect:2.2.10")
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.7.1")
             }
         }

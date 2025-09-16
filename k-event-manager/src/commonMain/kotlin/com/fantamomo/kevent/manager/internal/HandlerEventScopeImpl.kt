@@ -47,7 +47,7 @@ class HandlerEventScopeImpl(val parent: HandlerEventScope) : HandlerEventScope {
         parent.unregister(listener)
     }
 
-    override fun <E : Dispatchable> register(
+    override fun <E : KEventElement> register(
         event: KClass<E>,
         configuration: EventConfiguration<E>,
         handler: (E) -> Unit,
@@ -56,7 +56,7 @@ class HandlerEventScopeImpl(val parent: HandlerEventScope) : HandlerEventScope {
         return parent.register(event, configuration, handler).also { listeners.add(it) }
     }
 
-    override fun <E : Dispatchable> registerSuspend(
+    override fun <E : KEventElement> registerSuspend(
         event: KClass<E>,
         configuration: EventConfiguration<E>,
         handler: suspend (E) -> Unit,
