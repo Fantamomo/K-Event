@@ -11,7 +11,7 @@ package com.fantamomo.kevent
  * @see EventConfigurationScope
  * @see Key
  */
-sealed interface EventConfiguration<E : Dispatchable> {
+sealed interface EventConfiguration<E : KEventElement> {
 
     /**
      * Returns the value associated with the specified key, or `null` if no value is set.
@@ -48,10 +48,10 @@ sealed interface EventConfiguration<E : Dispatchable> {
     companion object Empty : EventConfiguration<Nothing> {
 
         @Suppress("UNCHECKED_CAST")
-        fun <E : Dispatchable> default(): EventConfiguration<E> =
+        fun <E : KEventElement> default(): EventConfiguration<E> =
             this as EventConfiguration<E>
 
-        operator fun <D : Dispatchable> invoke(scope: EventConfigurationScope<D>): EventConfiguration<D> =
+        operator fun <D : KEventElement> invoke(scope: EventConfigurationScope<D>): EventConfiguration<D> =
             if (scope.isEmpty()) default() else EventConfigurationImpl(scope.data.toMap())
 
         override fun <T> get(key: Key<T>) = null
@@ -76,7 +76,7 @@ sealed interface EventConfiguration<E : Dispatchable> {
      * @author Fantamomo
      * @since 1.4-SNAPSHOT
      */
-    class EventConfigurationImpl<E : Dispatchable> @PublishedApi internal constructor(
+    class EventConfigurationImpl<E : KEventElement> @PublishedApi internal constructor(
         internal val data: Map<Key<*>, Any?>
     ) : EventConfiguration<E> {
 
