@@ -13,7 +13,7 @@ import kotlin.reflect.KClass
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
-abstract class Dispatchable {
+abstract class Dispatchable : KEventElement {
     /**
      * Interface for companion objects of classes inheriting from `Dispatchable`.
      *
