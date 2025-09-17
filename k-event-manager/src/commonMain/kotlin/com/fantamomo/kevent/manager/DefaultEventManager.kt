@@ -55,6 +55,9 @@ class DefaultEventManager internal constructor(
     private val scope: CoroutineScope =
         components[EventCoroutineScope]?.scope ?: CoroutineScope(Dispatchers.Default + SupervisorJob())
 
+    // Invoker for calling the methods from Listener
+    private val invoker: ListenerInvoker = components.getOrThrow(ListenerInvoker.Key)
+
     // Indicates if manager has been closed (no more registration/dispatch possible)
     private var isClosed = false
 
@@ -531,6 +534,20 @@ class DefaultEventManager internal constructor(
         return handlers.computeIfAbsent(type) { HandlerBucket<E>() } as HandlerBucket<E>
     }
 
+    private fun <D : Dispatchable> bindListener(
+        listener: Listener,
+        function: KFunction<*>,
+        args: () -> Array<KClass<*>>
+    ): ListenerInvoker.CallHandler<D> {
+        val reflection = ListenerInvoker.reflection()
+        return if (invoker === reflection) reflection.bindListener(listener, function, args)
+        else try {
+            invoker.bindListener(listener, function, args)
+        } catch (_: Exception) {
+            reflection.bindListener(listener, function, args)
+        }
+    }
+
     companion object {
         /**
          * The logger for the DefaultEventManager.
@@ -887,6 +904,10 @@ class DefaultEventManager internal constructor(
                 .toTypedArray()
         }
 
+        private val handler: ListenerInvoker.CallHandler<E> by lazy {
+            manager.bindListener(listener, kFunction, ::argTypes)
+        }
+
         @Suppress("UNCHECKED_CAST")
         /** Strategies for resolving additional parameters beyond the listener and event */
         private val extraStrategies: Array<ArgStrategy<E>> by lazy {
@@ -899,39 +920,21 @@ class DefaultEventManager internal constructor(
 
         /** Non-suspend invocation of the function */
         override fun invokeInternal(event: E, isSticky: Boolean) {
-            if (extraStrategies.isEmpty()) {
-                // No extra parameters, call directly
-                kFunction.call(listener, event)
-            } else {
-                // Build argument array and call
-                val args = buildArgs(event, true, isSticky)
-                kFunction.call(*args)
-            }
+            val args = buildArgs(event, true, isSticky)
+            handler.invoke(event, args)
         }
 
         /** Suspend invocation of the function */
         override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean, isSticky: Boolean) {
-            if (extraStrategies.isEmpty()) {
-                // No extra parameters, call directly
-                kFunction.callSuspend(listener, event)
-            } else {
-                // Build argument array and call
-                val args = buildArgs(event, isWaiting, isSticky)
-                kFunction.callSuspend(*args)
-            }
+            val args = buildArgs(event = event, isWaiting = isWaiting, isSticky = isSticky)
+            handler.invokeSuspend(event, args)
         }
 
         /** Builds the full argument array for the function call */
-        private fun buildArgs(event: E, isWaiting: Boolean, isSticky: Boolean): Array<Any?> {
-            val args = arrayOfNulls<Any?>(2 + extraStrategies.size)
-            args[0] = listener // First parameter: listener instance
-            args[1] = event    // Second parameter: event
-            // Fill in any additional resolved parameters
-            for (i in extraStrategies.indices) {
-                args[i + 2] = extraStrategies[i].resolve(event, isWaiting, isSticky)
+        private fun buildArgs(event: E, isWaiting: Boolean, isSticky: Boolean): Array<Any?> =
+            Array(extraStrategies.size) { index ->
+                extraStrategies[index].resolve(event, isWaiting, isSticky)
             }
-            return args
-        }
 
         /** Checks whether the provided generic types are allowed for this listener */
         fun allowGenericTypes(types: List<KClass<*>>): Boolean {
