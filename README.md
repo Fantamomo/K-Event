@@ -547,14 +547,13 @@ val invoker = ListenerInvoker.methodHandler()
 
 ## Create EventManagers
 
-The default function for creating a `DefaultEventManager` is `EventManager`, but there is more.
+The default way to create a `DefaultEventManager` is via the `EventManager` function. However, you can customize it with additional components.
 
-The `EventManager` function takes Components, for example the default manager will ignore errors thrown in listeners,
-if you want to log these errors, you can use a `ExceptionHandler`.
+By default, the manager ignores errors thrown in listeners. If you want to handle or log these errors, you can provide an `ExceptionHandler`:
 
 ```kotlin
 object SysOutExceptionHandler : ExceptionHandler() {
-    override fun handle(exception: Throwable, listener: Listener?, methode: KFunction<*>?) {
+    override fun handle(exception: Throwable, listener: Listener?, method: KFunction<*>?) {
         exception.printStackTrace()
     }
 }
@@ -562,22 +561,26 @@ object SysOutExceptionHandler : ExceptionHandler() {
 val manager = EventManager(SysOutExceptionHandler)
 ```
 
-But there is more, do you want a custom injectable parameter.
+### Custom Parameters
+
+You can also inject custom parameters into listeners:
 
 ```kotlin
 val server: Server = ...
 
-val parameter = ListenerParameterResolver.static("server", Server::class, server)
+val staticParameter = ListenerParameterResolver.static("server", Server::class, server)
 val dynamicParameter = ListenerParameterResolver.dynamic("time", Instant::class) { Clock.System.now() }
 
-val manager = EventManager(parameter)
+val manager = EventManager(staticParameter + dynamicParameter)
 ```
 
 There are two types of `ListenerParameterResolver`:
 
-* `static`: The type does not change.
-* `dynamic`: The type can change (e.g. because of listeners).
-Note that a dynamic type **must** provide a default value (e.g. `0`, empty, ...), which is uses when registering a listener, so that the signatur is completed.
+* **static**: Value does not change.
+* **dynamic**: Value can change (e.g., depending on runtime conditions).  
+  A dynamic resolver **must** provide a default value (e.g., `0`, empty, etc.) for listener registration.
+
+Example usage in a listener:
 
 ```kotlin
 class ServerListener : Listener {
@@ -588,16 +591,20 @@ class ServerListener : Listener {
 }
 ```
 
-You can add as many `ListenerParameterResolver` as you want, but only one `ExceptionHandler`.
+You can add multiple `ListenerParameterResolver`s, but only **one** `ExceptionHandler` per manager.
 
-There is also a `SharedExclusiveExecution` component,
-which can be used to prevent concurrent execution of handlers, when the are using `exclusiveListenerProcessing`.
-Every EventManager has its own `SharedExclusiveExecution` instance,
-but you can override when adding it to the manager, via the `+` operator.
+---
 
-For `ListenerInvoker` see [Listener Invoker](#listener-invoker).
+### Shared Exclusive Execution
 
-If you want to combine some components:
+The `SharedExclusiveExecution` component can prevent concurrent execution of handlers when using `exclusiveListenerProcessing`.  
+Each `EventManager` has its own `SharedExclusiveExecution` instance, but you can override it when adding it to the manager using the `+` operator.
+
+---
+
+### Combining Components
+
+You can combine multiple components when creating a manager:
 
 ```kotlin
 val sharedExecution = SharedExclusiveExecution()
@@ -605,12 +612,14 @@ val invoker = ListenerInvoker.methodHandler()
 
 val manager = EventManager(
     SysOutExceptionHandler +
-            parameter +
-            dynamicParameter +
-            sharedExecution +
-            invoker
+    staticParameter +
+    dynamicParameter +
+    sharedExecution +
+    invoker
 )
 ```
+
+For more on `ListenerInvoker`, see [Listener Invoker](#listener-invoker).
 
 ## 🎓 How to Add to Your Project
 
