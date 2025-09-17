@@ -496,6 +496,42 @@ There is also a new injectable parameter `isSticky: Boolean` that can be used to
 
 ---
 
+## Listener Invoker
+
+The **ListenerInvoker** is a core component of the event manager.
+It is responsible for binding `Listener` methods to events and invoking them during event processing.
+
+Listener methods can be invoked in two different ways:
+
+### 🔍 ReflectionListenerInvoker
+
+* Uses **Kotlin reflection** to dynamically call listener methods.
+* Supports both regular and `suspend` functions.
+* Acts as a **fallback** if another invoker fails during binding.
+* Easy to use, but generally slower compared to method handles.
+* The default invoker.
+
+```kotlin
+val invoker = ListenerInvoker.reflection()
+```
+
+### ⚡ MethodHandlerListenerInvoker
+
+* Uses the **Java MethodHandle API** for high-performance invocation.
+* Supports both regular and `suspend` listener methods.
+* By default relies on `MethodHandles.publicLookup()`.
+  Since listener methods must always be `public`, there is no need to create a private lookup in most cases.
+* **Limitations:** Cannot handle classes declared inside functions or anonymous classes when using the default `publicLookup()`.
+  In these cases, the system automatically falls back to the `ReflectionListenerInvoker`.
+  Private classes **can** be handled if a proper `MethodHandles.Lookup` is provided instead of the default.
+* Faster than reflection and recommended if performance is important.
+
+```kotlin
+val invoker = ListenerInvoker.methodHandler()
+```
+
+---
+
 ## Create EventManagers
 
 The default function for creating a `DefaultEventManager` is `EventManager`, but there is more.
@@ -546,16 +582,20 @@ which can be used to prevent concurrent execution of handlers, when the are usin
 Every EventManager has its own `SharedExclusiveExecution` instance,
 but you can override when adding it to the manager, via the `+` operator.
 
+For `ListenerInvoker` see [Listener Invoker](#listener-invoker).
+
 If you want to combine some components:
 
 ```kotlin
 val sharedExecution = SharedExclusiveExecution()
+val invoker = ListenerInvoker.methodHandler()
 
 val manager = EventManager(
     SysOutExceptionHandler +
             parameter +
             dynamicParameter +
-            sharedExecution
+            sharedExecution +
+            invoker
 )
 ```
 
