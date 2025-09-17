@@ -32,81 +32,65 @@ import kotlin.reflect.jvm.jvmName
  * @since 1.0-SNAPSHOT
  */
 class DefaultEventManager internal constructor(
-    components: EventManagerComponent<*>, // Injected components for customization (e.g., exception handling, coroutine scope)
+    components: EventManagerComponent<*>,
 ) : EventManager {
 
-    // Maps event types to their handler collections
-    private val handlers: ConcurrentHashMap<KClass<out KEventElement>, HandlerBucket<out KEventElement>> =
+    private val handlers: ConcurrentHashMap<KClass<out Dispatchable>, HandlerBucket<out Dispatchable>> =
         ConcurrentHashMap()
 
-    // Stores last dispatched "sticky" events so late listeners can still receive them
     private val stickyEvents: ConcurrentHashMap<KClass<out Dispatchable>, Dispatchable> = ConcurrentHashMap()
 
-    // Exception handler to report listener/dispatch errors
     private val exceptionHandler = components.getOrThrow(ExceptionHandler)
 
-    // List of resolvers for injecting extra parameters into listener methods
     private val parameterResolver: List<ListenerParameterResolver<*>>
 
-    // Shared lock management for exclusive listener execution
     private val sharedExclusiveExecution = components.getOrThrow(SharedExclusiveExecution)
 
-    // Coroutine scope for async dispatch; uses provided scope or default SupervisorJob
     private val scope: CoroutineScope =
         components[EventCoroutineScope]?.scope ?: CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-    // Indicates if manager has been closed (no more registration/dispatch possible)
     private var isClosed = false
 
-    // Global setting: whether to dispatch DeadEvent when no listener handled an event
     private val dispatchDeadEvents = components.getSetting(Settings.DISPATCH_DEAD_EVENTS)
 
     init {
         var comps = components
 
-        // Optional injection: make the manager itself available to listeners
         if (!comps.getSetting(Settings.DISABLE_EVENTMANAGER_INJECTION)) comps += ListenerParameterResolver.static(
             "manager",
             EventManager::class,
             this
         )
 
-        // Optional injection: provide logger instance to listeners
         if (!comps.getSetting(Settings.DISABLE_LOGGER_INJECTION)) ListenerParameterResolver.static(
             "logger",
             Logger::class,
             logger
         )
-        // Optional injection: provide new coroutine scope to listeners
         if (!comps.getSetting(Settings.DISABLE_SCOPE_INJECTION)) ListenerParameterResolver.static(
             "scope",
             CoroutineScope::class,
             CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job))
         )
 
-        // Internal parameter resolvers (waiting/sticky/config info)
         if (!comps.getSetting(Settings.DISABLE_IS_WAITING_INJECTION)) comps += IsWaitingParameterResolver
+
         if (!comps.getSetting(Settings.DISABLE_IS_STICKY_INJECTION)) comps += IsStickyParameterResolver
+
         if (!comps.getSetting(Settings.DISABLE_CONFIG_INJECTION)) comps += ConfigParameterResolver
 
-        // Finalize list of all available resolvers
         parameterResolver = comps.getAll(ListenerParameterResolver.Key)
     }
 
     // ---------
     // Functions
     // ---------
-    /** Checks if at least one listener class of this type is already registered */
     private fun existListener(clazz: KClass<out Listener>) = handlers.values.any { it.existListener(clazz) }
 
-    /** Finds all registered listener methods for a specific listener class */
     private fun findAllListeners(clazz: KClass<out Listener>): List<RegisteredKFunctionListener<*>> {
         return handlers.values.flatMap { it.findAllListeners(clazz) }
     }
 
-    /**
-     * Registers an already-known listener definition (e.g., on re-register of same class)
-     */
     private fun registerRegisteredListener(listenerClass: KClass<out Listener>, listener: Listener) {
         val listeners = findAllListeners(listenerClass)
         out@ for (registered in listeners) {
@@ -114,16 +98,17 @@ class DefaultEventManager internal constructor(
             registered as RegisteredKFunctionListener<Dispatchable>
             var newConfiguration: EventConfiguration<Dispatchable>? = null
 
-            // If event parameter is non-nullable, use default configuration
             if (!registered.kFunction.parameters[1].type.isMarkedNullable) {
                 newConfiguration = EventConfiguration.default()
             } else {
-                // Otherwise, call method with null to capture custom configuration via exception
                 val args = registered.kFunction.parameters.map { param ->
                     when (param.index) {
-                        0 -> listener // "this" for the function
-                        1 -> null // event argument is null
-                        else -> registered.resolvers[param]?.valueByConfiguration
+                        0 -> listener
+                        1 -> null
+                        else -> {
+                            val resolver = registered.resolvers[param]
+                            resolver?.valueByConfiguration
+                        }
                     }
                 }
                 val method = registered.kFunction
@@ -134,7 +119,10 @@ class DefaultEventManager internal constructor(
                             try {
                                 method.callSuspend(*args.toTypedArray())
                                 exceptionHandler("onMethodDidNotThrowConfiguredException") {
-                                    onMethodDidNotThrowConfiguredException(listener, method)
+                                    onMethodDidNotThrowConfiguredException(
+                                        listener,
+                                        method
+                                    )
                                 }
                             } catch (e: InvocationTargetException) {
                                 exception = e
@@ -145,11 +133,13 @@ class DefaultEventManager internal constructor(
                     } else {
                         method.call(*args.toTypedArray())
                         exceptionHandler("onMethodDidNotThrowConfiguredException") {
-                            onMethodDidNotThrowConfiguredException(listener, method)
+                            onMethodDidNotThrowConfiguredException(
+                                listener,
+                                method
+                            )
                         }
                     }
                 } catch (e: InvocationTargetException) {
-                    // Custom config captured from thrown exception
                     val config = (e.targetException as? ConfigurationCapturedException)?.configuration
                     if (config !is EventConfiguration<*>) continue@out
                     @Suppress("UNCHECKED_CAST")
@@ -157,14 +147,17 @@ class DefaultEventManager internal constructor(
                 } catch (e: Throwable) {
                     e.rethrowIfFatal()
                     exceptionHandler("onUnexpectedExceptionDuringRegistration") {
-                        onUnexpectedExceptionDuringRegistration(listener, method, e)
+                        onUnexpectedExceptionDuringRegistration(
+                            listener,
+                            method,
+                            e
+                        )
                     }
                     continue@out
                 }
             }
             if (newConfiguration == null) continue@out
 
-            // Replace with a new instance bound to this listener
             val new = RegisteredKFunctionListener(
                 registered.type,
                 listener,
@@ -181,13 +174,11 @@ class DefaultEventManager internal constructor(
         checkClosed()
         val listenerClass = listener::class
 
-        // If we already have methods from this class, just rebind
         if (existListener(listenerClass)) {
             registerRegisteredListener(listenerClass, listener)
             return
         }
 
-        // Scan methods for @Register annotation
         out@ for (method in listenerClass.declaredMemberFunctions) {
             if (!method.hasAnnotation<Register>()) continue
             if (method.visibility != KVisibility.PUBLIC) {
@@ -195,60 +186,63 @@ class DefaultEventManager internal constructor(
                 continue@out
             }
 
-            // Must have at least (this, event) parameters
             val parameters = method.parameters
             if (parameters.size < 2) {
                 exceptionHandler("onMethodHasNoParameters") { onMethodHasNoParameters(listener, method) }
                 continue@out
             }
 
-            // Resolve extra parameters (beyond listener + event)
             val resolvers = parameters.dropWhile { it.index < 2 }.associateWith { parameter ->
-                val name = (parameter.findAnnotation<InjectionName>()?.value ?: parameter.name)
+                val name = (parameter.findAnnotation<InjectionName>()?.value
+                    ?: parameter.name)
                 parameterResolver.find {
                     it.name == name && it.type == parameter.type.classifier
                 } ?: run {
                     if (name == null) {
-                        // Every parameter should have a name.
-                        // If execution reaches this point, something has gone seriously wrong.
-                        // `INSTANCE` and `EXTENSION_RECEIVER` are exceptions — they have no names, but we’ve already handled them, which is why we log this.
                         logger.severe(
                             "A Parameter which should have a name, has none. " +
                                     "(Parameter index: ${parameter.index}) (Type: ${parameter.type}) " +
                                     "(Kind: ${parameter.kind} (Method: ${listenerClass.jvmName}#${method.name})"
                         )
                     } else {
-                    // Log missing resolver
                         exceptionHandler("onParameterHasNoResolver") {
-                            onParameterHasNoResolver(listener, method, parameter, name, parameter.type)
+                            onParameterHasNoResolver(
+                                listener, method, parameter,
+                                name, parameter.type
+                            )
                         }
                     }
                     continue@out
                 }
             }
 
-            // Verify second parameter type is a KEventElement
             val eventClass = parameters[1].type.classifier as? KClass<*> ?: continue
-            if (!KEventElement::class.isSuperclassOf(eventClass)) {
+            if (!Dispatchable::class.isSuperclassOf(eventClass)) {
                 exceptionHandler("onMethodHasNoDispatchableParameter") {
-                    onMethodHasNoDispatchableParameter(listener, method, parameters[1].type)
+                    onMethodHasNoDispatchableParameter(
+                        listener,
+                        method,
+                        parameters[1].type
+                    )
                 }
                 continue@out
             }
 
             @Suppress("UNCHECKED_CAST")
-            val typedEventClass = eventClass as KClass<KEventElement>
+            val typedEventClass = eventClass as KClass<Dispatchable>
 
-            // Prepare arguments for capturing config if nullable
             val args = method.parameters.map { param ->
                 when (param.index) {
                     0 -> listener
                     1 -> null
-                    else -> resolvers[param]?.valueByConfiguration
+                    else -> {
+                        val resolver = resolvers[param]
+                        resolver?.valueByConfiguration
+                    }
                 }
             }
 
-            val defaultConfigOrCaptured: EventConfiguration<KEventElement>? =
+            val defaultConfigOrCaptured: EventConfiguration<Dispatchable>? =
                 if (!parameters[1].type.isMarkedNullable) {
                     EventConfiguration.default()
                 } else {
@@ -260,7 +254,10 @@ class DefaultEventManager internal constructor(
                                 try {
                                     method.callSuspend(*args.toTypedArray())
                                     exceptionHandler("onMethodDidNotThrowConfiguredException") {
-                                        onMethodDidNotThrowConfiguredException(listener, method)
+                                        onMethodDidNotThrowConfiguredException(
+                                            listener,
+                                            method
+                                        )
                                     }
                                 } catch (e: InvocationTargetException) {
                                     exception = e
@@ -271,7 +268,10 @@ class DefaultEventManager internal constructor(
                         } else {
                             method.call(*args.toTypedArray())
                             exceptionHandler("onMethodDidNotThrowConfiguredException") {
-                                onMethodDidNotThrowConfiguredException(listener, method)
+                                onMethodDidNotThrowConfiguredException(
+                                    listener,
+                                    method
+                                )
                             }
                         }
                         null
@@ -279,21 +279,28 @@ class DefaultEventManager internal constructor(
                         exceptionHandler("onMethodNotAccessible") { onMethodNotAccessible(listener, method) }
                         null
                     } catch (e: InvocationTargetException) {
-                        // Check if method threw captured configuration
                         val config = (e.targetException as? ConfigurationCapturedException)?.configuration
                         if (config !is EventConfiguration<*>) {
                             exceptionHandler("onMethodThrewUnexpectedException") {
-                                onMethodThrewUnexpectedException(listener, method, e.targetException)
+                                onMethodThrewUnexpectedException(
+                                    listener,
+                                    method,
+                                    e.targetException
+                                )
                             }
                             null
                         } else {
                             @Suppress("UNCHECKED_CAST")
-                            config as EventConfiguration<KEventElement>
+                            config as EventConfiguration<Dispatchable>
                         }
                     } catch (t: Throwable) {
                         t.rethrowIfFatal()
                         exceptionHandler("onUnexpectedExceptionDuringRegistration") {
-                            onUnexpectedExceptionDuringRegistration(listener, method, t)
+                            onUnexpectedExceptionDuringRegistration(
+                                listener,
+                                method,
+                                t
+                            )
                         }
                         null
                     }
@@ -308,7 +315,6 @@ class DefaultEventManager internal constructor(
                 continue@out
             }
 
-            // Wrap into RegisteredKFunctionListener and store
             val handler = RegisteredKFunctionListener(
                 type = typedEventClass,
                 listener = listener,
@@ -329,7 +335,7 @@ class DefaultEventManager internal constructor(
                 is SimpleListener<*> -> RegisteredSimpleListener(this, listener)
                 is SimpleSuspendListener<*> -> RegisteredSimpleSuspendListener(this, listener)
             }
-            val registered = simpleListener as RegisteredListener<KEventElement>
+            val registered = simpleListener as RegisteredListener<Dispatchable>
             getOrCreateHandlerBucket(registered.type).add(registered)
         } catch (e: NoResolverException) {
             exceptionHandler("onParameterHasNoResolver") { onParameterHasNoResolver(listener, e.name, e.type) }
@@ -338,7 +344,6 @@ class DefaultEventManager internal constructor(
 
     override fun <D : Dispatchable> dispatch(event: D, config: DispatchConfig<D>) {
         checkClosed()
-        // if we have no handlers there is no need for DeadEvent
         if (handlers.isEmpty()) return
         val eventClass = event::class
         var called = false
@@ -349,12 +354,10 @@ class DefaultEventManager internal constructor(
             called = called or bucket.call(event, genericTypes)
         }
 
-        // If event is marked sticky, store latest instance
         if (config.getOrDefault(DispatchConfigKey.STICKY)) {
             stickyEvents[eventClass] = event
         }
 
-        // No handlers found → maybe dispatch DeadEvent
         if (dispatchDeadEvents && config.getOrDefault(DispatchConfigKey.DISPATCH_DEAD_EVENT) && !called && eventClass != DeadEvent::class) {
             dispatch(DeadEvent(event))
         }
@@ -362,8 +365,6 @@ class DefaultEventManager internal constructor(
 
     override suspend fun <D : Dispatchable> dispatchSuspend(event: D, config: DispatchConfig<D>) {
         checkClosed()
-        // if we have no handlers there is no need for DeadEvent
-        if (handlers.isEmpty()) return
         val eventClass = event::class
         var called = false
         val genericTypes = (event as? GenericTypedEvent)?.extractGenericTypes() ?: emptyList()
@@ -373,12 +374,10 @@ class DefaultEventManager internal constructor(
             called = called or bucket.callSuspend(event, genericTypes)
         }
 
-        // If event is marked sticky, store latest instance
         if (config.getOrDefault(DispatchConfigKey.STICKY)) {
             stickyEvents[eventClass] = event
         }
 
-        // No handlers found → maybe dispatch DeadEvent
         if (dispatchDeadEvents && config.getOrDefault(DispatchConfigKey.DISPATCH_DEAD_EVENT) && !called && eventClass != DeadEvent::class) {
             dispatchSuspend(DeadEvent(event))
         }
@@ -394,7 +393,7 @@ class DefaultEventManager internal constructor(
         stickyEvents.remove(clazz)
     }
 
-    override fun <E : KEventElement> register(
+    override fun <E : Dispatchable> register(
         event: KClass<E>,
         configuration: EventConfiguration<E>,
         handler: (E) -> Unit,
@@ -407,14 +406,13 @@ class DefaultEventManager internal constructor(
             manager = this,
         )
         getOrCreateHandlerBucket(event).add(listener)
-        // return RegisteredLambdaHandler so caller can unregister the handler
         return RegisteredLambdaHandler {
             @Suppress("UNCHECKED_CAST")
             (handlers[event] as? HandlerBucket<E>)?.remove(listener)
         }
     }
 
-    override fun <E : KEventElement> registerSuspend(
+    override fun <E : Dispatchable> registerSuspend(
         event: KClass<E>,
         configuration: EventConfiguration<E>,
         handler: suspend (E) -> Unit,
@@ -427,7 +425,6 @@ class DefaultEventManager internal constructor(
             suspendMethod = handler,
         )
         getOrCreateHandlerBucket(event).add(listener)
-        // return RegisteredLambdaHandler so caller can unregister the handler
         return RegisteredLambdaHandler {
             @Suppress("UNCHECKED_CAST")
             (handlers[event] as? HandlerBucket<E>)?.remove(listener)
@@ -463,12 +460,10 @@ class DefaultEventManager internal constructor(
             exceptionHandler.handle(
                 e,
                 (listener as? RegisteredKFunctionListener)?.listener,
-                (listener as? RegisteredKFunctionListener)?.kFunction
+                (listener as? RegisteredKFunctionListener<*>)?.kFunction
             )
         } catch (handlerException: Throwable) {
-            // rethrow it if it is a fatal exception
             handlerException.rethrowIfFatal()
-            // so the exception handler has thrown an exception, we simply log it
             logger.log(
                 Level.SEVERE,
                 "Exception-Handler failed while handling an exception",
@@ -494,9 +489,7 @@ class DefaultEventManager internal constructor(
         try {
             exceptionHandler.block()
         } catch (e: Throwable) {
-            // rethrow it if it is a fatal exception
             e.rethrowIfFatal()
-            // so the exception handler has thrown an exception, we simply log it
             logger.log(
                 Level.WARNING,
                 "Method '$methodName' in ${exceptionHandler::class.jvmName} threw an exception.",
@@ -505,22 +498,12 @@ class DefaultEventManager internal constructor(
         }
     }
 
-    private fun <E : KEventElement> getOrCreateHandlerBucket(type: KClass<E>): HandlerBucket<E> {
+    private fun <E : Dispatchable> getOrCreateHandlerBucket(type: KClass<E>): HandlerBucket<E> {
         @Suppress("UNCHECKED_CAST")
         return handlers.computeIfAbsent(type) { HandlerBucket<E>() } as HandlerBucket<E>
     }
 
     companion object {
-        /**
-         * The logger for the DefaultEventManager.
-         * It only logs [Level.SEVERE].
-         *
-         * If you want to disable it:
-         * ```
-         * val logger = Logger.getLogger(DefaultEventManager::class.jvmName)
-         * logger.level = Level.OFF
-         * ```
-         */
         private val logger = Logger.getLogger(DefaultEventManager::class.jvmName)
             .apply {
                 level = Level.SEVERE
@@ -544,37 +527,28 @@ class DefaultEventManager internal constructor(
     // -------------
     // HandlerBucket
     // -------------
-    private inner class HandlerBucket<E : KEventElement> {
-
-        // Holds the current list of registered listeners atomically (thread-safe)
+    private inner class HandlerBucket<E : Dispatchable> {
         private val snapshot: AtomicReference<List<RegisteredListener<E>>> = AtomicReference(emptyList())
 
         fun add(listener: RegisteredListener<E>) {
             while (true) {
-                val cur = snapshot.get() // Get current list
-                // Add listener and sort by priority (descending)
+                val cur = snapshot.get()
                 val next = (cur + listener).sortedByDescending { it.configuration.priority }
-                // Update list only if no other thread has changed it in the meantime
                 if (snapshot.compareAndSet(cur, next)) break
             }
-            // Immediately dispatch sticky events to the new listener if applicable
             dispatchSticky(listener)
         }
 
         private fun dispatchSticky(listener: RegisteredListener<E>) {
-            // Skip if listener is configured to ignore sticky events
             if (listener.configuration.ignoreStickyEvents) return
             for ((type, event) in stickyEvents) {
                 @Suppress("UNCHECKED_CAST")
                 event as E
 
-                // Event type must be a subclass of listener type
                 if (!type.isSubclassOf(listener.type)) continue
 
-                // If subtypes are disallowed, types must match exactly
                 if (listener.configuration.disallowSubtypes && type != listener.type) continue
 
-                // Call the listener — either suspendable or normal
                 if (listener.isSuspend) {
                     scope.launch(Dispatchers.Unconfined) {
                         listener.invokeSuspend(event, isWaiting = false, isSticky = true)
@@ -590,14 +564,11 @@ class DefaultEventManager internal constructor(
         fun remove(target: SimpleConfiguration<*>) {
             while (true) {
                 val cur = snapshot.get()
-                // Filter out listeners associated with the given configuration
                 val next = cur.filterNot {
                     (it as? RegisteredSimpleListener<E>)?.simpleListener === target ||
                             (it as? RegisteredSimpleSuspendListener<E>)?.simpleListener === target
                 }
-                // If nothing changed, stop
                 if (next.size == cur.size) return
-                // Otherwise, update atomically
                 if (snapshot.compareAndSet(cur, next)) return
             }
         }
@@ -605,7 +576,6 @@ class DefaultEventManager internal constructor(
         fun remove(target: Listener) {
             while (true) {
                 val cur = snapshot.get()
-                // Remove listeners with exactly the same listener instance
                 val next = cur.filterNot { (it as? RegisteredKFunctionListener<E>)?.listener === target }
                 if (next.size == cur.size) return
                 if (snapshot.compareAndSet(cur, next)) return
@@ -615,7 +585,6 @@ class DefaultEventManager internal constructor(
         private fun removeByIdentity(target: RegisteredListener<E>) {
             while (true) {
                 val cur = snapshot.get()
-                // Remove only if the object instance is exactly the same (===)
                 val next = cur.filterNot { it === target }
                 if (next.size == cur.size) return
                 if (snapshot.compareAndSet(cur, next)) return
@@ -631,7 +600,6 @@ class DefaultEventManager internal constructor(
             var firstMatch: Listener? = null
             return snapshot.get().filter { registered ->
                 (registered as? RegisteredKFunctionListener<E>)?.listener?.let {
-                    // Keep only the first instance of a given listener type
                     if (it::class != clazz) return@filter true
                     if (firstMatch == null) firstMatch = it
                     it === firstMatch
@@ -647,21 +615,16 @@ class DefaultEventManager internal constructor(
             val typedEvent = event as E
             var called = false
             for (handler in list) {
-                // If subtypes are disallowed, types must match exactly
                 if (handler.configuration.disallowSubtypes) {
                     if (typedEvent::class != handler.type) continue
                 }
-                // Check generic type compatibility if applicable
-                if (event::class == handler.type && genericTypes.isNotEmpty() &&
-                    handler is RegisteredKFunctionListener<E> &&
-                    !handler.allowGenericTypes(genericTypes)
+                if (event::class == handler.type && genericTypes.isNotEmpty() && handler is RegisteredKFunctionListener<E> && !handler.allowGenericTypes(
+                        genericTypes
+                    )
                 ) continue
 
                 val silent = handler.configuration.silent
                 if (handler.isSuspend) {
-                    // Execute suspend listeners in a coroutine
-                    // We use Dispatchers.Unconfined here to allow the handler to modify the event
-                    // before it is passed on, or the entire dispatch process is over
                     scope.launch(Dispatchers.Unconfined) {
                         try {
                             handler.invokeSuspend(typedEvent, isWaiting = false, isSticky = false)
@@ -671,7 +634,6 @@ class DefaultEventManager internal constructor(
                     }
                     if (!silent) called = true
                 } else {
-                    // Execute regular listeners synchronously
                     try {
                         if (handler(typedEvent, false) && !silent) called = true
                     } catch (e: Throwable) {
@@ -690,17 +652,14 @@ class DefaultEventManager internal constructor(
             val typedEvent = event as E
             var called = false
             for (handler in list) {
-                // If subtypes are disallowed, types must match exactly
                 if (handler.configuration.disallowSubtypes && typedEvent::class != handler.type) continue
-                // Check generic type compatibility if applicable
-                if (event::class == handler.type && genericTypes.isNotEmpty() &&
-                    handler is RegisteredKFunctionListener<E> &&
-                    !handler.allowGenericTypes(genericTypes)
+                if (event::class == handler.type && genericTypes.isNotEmpty() && handler is RegisteredKFunctionListener<E> && !handler.allowGenericTypes(
+                        genericTypes
+                    )
                 ) continue
 
                 val silent = handler.configuration.silent
                 try {
-                    // Call depending on whether the listener is suspendable
                     val success = if (handler.isSuspend) {
                         handler.invokeSuspend(typedEvent, isWaiting = true, isSticky = false)
                     } else {
@@ -722,72 +681,48 @@ class DefaultEventManager internal constructor(
     // --------------------
     // Registered Listeners
     // --------------------
-    private sealed class RegisteredListener<E : KEventElement>(
+    private sealed class RegisteredListener<E : Dispatchable>(
         val type: KClass<E>,
         val configuration: EventConfiguration<E>,
         val manager: DefaultEventManager,
     ) {
-        /** Whether this listener is a suspend (asynchronous) listener */
         open val isSuspend: Boolean = false
-
-        /** Unique identifier for the listener (used for exclusive execution) */
         abstract val handlerId: String
 
-        /** Operator function to invoke the listener for non-suspend events */
         operator fun invoke(event: E, isSticky: Boolean): Boolean {
-            require(event is Dispatchable) { "event must be a subtype of Dispatchable" }
-            if (isSuspend) throw UnsupportedOperationException(
-                "invoke is not supported for suspend functions."
-            )
-
-            // If exclusive execution is enabled, try to acquire the lock
+            if (isSuspend) throw UnsupportedOperationException("invoke is not supported for suspend functions.")
             if (configuration.exclusiveListenerProcessing) {
                 if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return false
             }
-
             try {
-                // Call the listener's internal implementation
                 invokeInternal(event, isSticky)
             } finally {
-                // Always release the exclusive lock
                 manager.sharedExclusiveExecution.release(handlerId)
             }
             return true
         }
 
-        /** Suspend version of invoke, for asynchronous listeners */
         suspend fun invokeSuspend(event: E, isWaiting: Boolean, isSticky: Boolean): Boolean {
-            require(event is Dispatchable) { "event must be a subtype of Dispatchable" }
-            // If exclusive execution is enabled, try to acquire the lock
             if (configuration.exclusiveListenerProcessing) {
                 if (!manager.sharedExclusiveExecution.tryAcquire(handlerId)) return false
             }
-
             try {
-                // Call the suspend internal implementation
                 invokeSuspendInternal(event, isWaiting, isSticky)
             } finally {
-                // Always release the exclusive lock
                 manager.sharedExclusiveExecution.release(handlerId)
             }
             return true
         }
 
-        /** Default suspend internal method (must be overridden if isSuspend == true) */
         @Throws(UnsupportedOperationException::class)
         protected open suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean, isSticky: Boolean) {
-            throw UnsupportedOperationException(
-                this::class.jvmName +
-                        if (isSuspend) " has not overridden invokeSuspendInternal"
-                        else " does not support suspend invocation"
-            )
+            throw UnsupportedOperationException(this::class.jvmName + if (isSuspend) " has not overridden invokeSuspendInternal" else " does not support suspend invocation")
         }
 
-        /** Non-suspend internal invocation — must be implemented by subclasses */
         protected abstract fun invokeInternal(event: E, isSticky: Boolean)
     }
 
-    private class RegisteredFunctionListener<E : KEventElement>(
+    private class RegisteredFunctionListener<E : Dispatchable>(
         type: KClass<E>,
         val method: (E) -> Unit,
         configuration: EventConfiguration<E>,
@@ -796,12 +731,11 @@ class DefaultEventManager internal constructor(
         override val handlerId: String = "RegisteredFunctionListener@${type.jvmName}@${method.hashCode()}"
 
         override fun invokeInternal(event: E, isSticky: Boolean) {
-            // delegate to method
             method(event)
         }
     }
 
-    private class RegisteredSuspendFunctionListener<E : KEventElement>(
+    private class RegisteredSuspendFunctionListener<E : Dispatchable>(
         type: KClass<E>,
         configuration: EventConfiguration<E>,
         manager: DefaultEventManager,
@@ -811,7 +745,6 @@ class DefaultEventManager internal constructor(
         override val handlerId: String = "RegisteredSuspendFunctionListener@${type.jvmName}@${suspendMethod.hashCode()}"
 
         override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean, isSticky: Boolean) {
-            // delegate to method
             suspendMethod(event)
         }
 
@@ -820,7 +753,7 @@ class DefaultEventManager internal constructor(
         }
     }
 
-    private class RegisteredKFunctionListener<E : KEventElement>(
+    private class RegisteredKFunctionListener<E : Dispatchable>(
         type: KClass<E>,
         val listener: Listener,
         val kFunction: KFunction<*>,
@@ -828,99 +761,68 @@ class DefaultEventManager internal constructor(
         val resolvers: Map<KParameter, ListenerParameterResolver<*>>,
         manager: DefaultEventManager,
     ) : RegisteredListener<E>(type, configuration, manager) {
-
-        /** Reference to the event parameter (2nd parameter of the function: listener, event, ...) */
         val eventParameter = kFunction.parameters[1]
-
-        /** The actual Kotlin type of the event parameter */
         private val actualType = eventParameter.type
-
-        /** Lazy-loaded list of type arguments (if the event type is generic) */
         private val typeArguments by lazy { actualType.arguments }
-
-        /** Checks if the event parameter has type arguments */
         private val hasTypeArguments: Boolean by lazy { typeArguments.any { it.type != null } }
-
-        /** Whether this is a suspend function */
         override val isSuspend: Boolean = kFunction.isSuspend
-
-        /** Unique identifier for the handler (used for exclusive processing) */
         override val handlerId: String =
             "RegisteredKFunctionListener@${type.jvmName}@${listener::class.jvmName}#${kFunction.hashCode()}"
 
         @Suppress("UNCHECKED_CAST")
-        /** Strategies for resolving additional parameters beyond the listener and event */
-        private val extraStrategies: Array<ArgStrategy<out Dispatchable>> by lazy {
-            kFunction.parameters.drop(2) // Skip first two (listener, event)
-                .map { param ->
-                    resolvers[param].toStrategy(this as RegisteredKFunctionListener<Dispatchable>) // Create resolution strategy for each extra parameter
-                }
-                .toTypedArray()
+        private val extraStrategies: Array<ArgStrategy<E>> by lazy {
+            kFunction.parameters.drop(2).map { param ->
+                resolvers[param].toStrategy(this)
+            }.toTypedArray()
         }
 
-        /** Non-suspend invocation of the function */
         override fun invokeInternal(event: E, isSticky: Boolean) {
             if (extraStrategies.isEmpty()) {
-                // No extra parameters, call directly
                 kFunction.call(listener, event)
             } else {
-                // Build argument array and call
                 val args = buildArgs(event, true, isSticky)
                 kFunction.call(*args)
             }
         }
 
-        /** Suspend invocation of the function */
         override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean, isSticky: Boolean) {
             if (extraStrategies.isEmpty()) {
-                // No extra parameters, call directly
                 kFunction.callSuspend(listener, event)
             } else {
-                // Build argument array and call
                 val args = buildArgs(event, isWaiting, isSticky)
                 kFunction.callSuspend(*args)
             }
         }
 
-        /** Builds the full argument array for the function call */
         private fun buildArgs(event: E, isWaiting: Boolean, isSticky: Boolean): Array<Any?> {
-            require(event is Dispatchable) { "event is not a subtype of Dispatchable" }
             val args = arrayOfNulls<Any?>(2 + extraStrategies.size)
-            args[0] = listener // First parameter: listener instance
-            args[1] = event    // Second parameter: event
-            // Fill in any additional resolved parameters
+            args[0] = listener
+            args[1] = event
             for (i in extraStrategies.indices) {
-                @Suppress("UNCHECKED_CAST")
-                args[i + 2] = (extraStrategies[i] as ArgStrategy<Dispatchable>).resolve(event, isWaiting, isSticky)
+                args[i + 2] = extraStrategies[i].resolve(event, isWaiting, isSticky)
             }
             return args
         }
 
-        /** Checks whether the provided generic types are allowed for this listener */
         fun allowGenericTypes(types: List<KClass<*>>): Boolean {
-            if (!hasTypeArguments) return true // If no generics, always allow
-            if (typeArguments.size != types.size) return false // Must have matching number of type arguments
-
+            if (!hasTypeArguments) return true
+            if (typeArguments.size != types.size) return false
             return typeArguments.mapIndexed { index, projection ->
                 if (projection.variance == null) return@mapIndexed true
                 val type = projection.type?.classifier as? KClass<*> ?: return@mapIndexed false
-                @Suppress("SENSELESS_NULL_IN_WHEN") // Suppress false-positive inspection
+                @Suppress("SENSELESS_NULL_IN_WHEN") // false positive inspection
                 when (projection.variance) {
-                    // Invariant: Must match exactly
                     KVariance.INVARIANT -> type == types[index]
-                    // "in" variance: provided type must be a superclass
                     KVariance.IN -> types[index].isSuperclassOf(type)
-                    // "out" variance: provided type must be a subclass
                     KVariance.OUT -> types[index].isSubclassOf(type)
-                    // "*" no variance specified: allow
                     null -> true
                 }
-            }.all() // All type argument checks must pass
+            }.all()
         }
     }
 
     @Suppress("UNCHECKED_CAST")
-    private class RegisteredSimpleListener<E : KEventElement>(
+    private class RegisteredSimpleListener<E : Dispatchable>(
         manager: DefaultEventManager,
         val simpleListener: SimpleListener<E>,
     ) : RegisteredListener<E>(
@@ -929,22 +831,22 @@ class DefaultEventManager internal constructor(
         manager
     ) {
         private val args = simpleListener.args()
-        private val resolvers: Map<String, ArgStrategy<Dispatchable>> = args.map { arg ->
+        private val resolvers: Map<String, ArgStrategy<E>> = args.map { arg ->
             arg.key to (manager.parameterResolver
                 .find { it.name == arg.key && it.type == arg.value }
                 ?: throw NoResolverException(arg.key, arg.value)
-                    ).toStrategy(this as RegisteredSimpleListener<Dispatchable>)
+                    ).toStrategy(this)
         }.toMap()
 
         override fun invokeInternal(event: E, isSticky: Boolean) {
-            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event as Dispatchable, true, isSticky) })
+            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event, true, isSticky) })
         }
 
         override val handlerId: String = "RegisteredSimpleListener@${type.jvmName}@${simpleListener.hashCode()}"
     }
 
     @Suppress("UNCHECKED_CAST")
-    private class RegisteredSimpleSuspendListener<E : KEventElement>(
+    private class RegisteredSimpleSuspendListener<E : Dispatchable>(
         manager: DefaultEventManager,
         val simpleListener: SimpleSuspendListener<E>,
     ) : RegisteredListener<E>(
@@ -953,11 +855,11 @@ class DefaultEventManager internal constructor(
         manager
     ) {
         private val args = simpleListener.args()
-        private val resolvers: Map<String, ArgStrategy<Dispatchable>> = args.map { arg ->
+        private val resolvers: Map<String, ArgStrategy<E>> = args.map { arg ->
             arg.key to (manager.parameterResolver
                 .find { it.name == arg.key && it.type == arg.value }
                 ?: throw NoResolverException(arg.key, arg.value)
-                    ).toStrategy(this as RegisteredSimpleSuspendListener<Dispatchable>)
+                    ).toStrategy(this)
         }.toMap()
 
         override fun invokeInternal(event: E, isSticky: Boolean) {
@@ -969,7 +871,7 @@ class DefaultEventManager internal constructor(
         override val isSuspend: Boolean = true
 
         override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean, isSticky: Boolean) {
-            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event as Dispatchable, isWaiting, isSticky) })
+            simpleListener.handleArgs(event, resolvers.mapValues { it.value.resolve(event, isWaiting, isSticky) })
         }
     }
 
@@ -1010,20 +912,6 @@ class DefaultEventManager internal constructor(
     // -------------------------
     // InternalParameterResolver
     // -------------------------
-    /** Marker interface for parameter resolvers that behave like ListenerParameterResolver<T>
-     * but provide access to special internal values that are NOT available through the normal
-     * resolve() mechanism.
-     *
-     * These resolvers never resolve their values directly via resolve(). Instead, when a parameter
-     * needs to be injected into a listener method, the event manager checks:
-     *   1. If the resolver is an InternalParameterResolver
-     *   2. If yes, it uses a `when` statement to match the specific implementation
-     *      (e.g., [IsWaitingParameterResolver], [ConfigParameterResolver], etc.)
-     *   3. It inserts the requested value
-     *
-     * If resolve() were called directly on an InternalParameterResolver, that would mean
-     * something went wrong in the parameter resolution process — so it throws an exception.
-     */
     private sealed interface InternalParameterResolver<T : Any> : ListenerParameterResolver<T> {
         override fun resolve(listener: Listener?, methode: KFunction<*>?, event: Dispatchable): T {
             throw IllegalStateException(

@@ -11,7 +11,7 @@ package com.fantamomo.kevent
  * @author Fantamomo
  * @since 1.2-SNAPSHOT
  */
-fun interface SimpleListener<E : KEventElement> : SimpleConfiguration<E> {
+fun interface SimpleListener<E : Dispatchable> : SimpleConfiguration<E> {
 
     /**
      * Handles an event of type [E].

@@ -77,7 +77,7 @@ interface HandlerEventScope {
      * @see createConfigurationScope
      * @see EventConfigurationScope
      */
-    fun <E : KEventElement> register(
+    fun <E : Dispatchable> register(
         event: KClass<E>,
         configuration: EventConfiguration<E> = EventConfiguration.default(),
         handler: (E) -> Unit,
@@ -90,7 +90,7 @@ interface HandlerEventScope {
      * The handler will be invoked whenever an instance of the specified event class is dispatched.
      * Additionally, a custom event configuration can be provided to modify event-specific behavior.
      *
-     * @param E The type of event the handler will process. It must extend from [Dispatchable] or [EventType].
+     * @param E The type of event the handler will process. It must extend from [Dispatchable].
      * @param event The class of the event to register the handler for.
      * @param configuration The configuration for the event handler. Defaults to the result of [EventConfiguration.default].
      * @param handler The suspending function to be invoked when the event is dispatched.
@@ -98,7 +98,7 @@ interface HandlerEventScope {
      *
      * @since 1.3-SNAPSHOT
      */
-    fun <E : KEventElement> registerSuspend(
+    fun <E : Dispatchable> registerSuspend(
         event: KClass<E>,
         configuration: EventConfiguration<E> = EventConfiguration.default(),
         handler: suspend (E) -> Unit,
