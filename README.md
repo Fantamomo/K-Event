@@ -238,6 +238,9 @@ In this mode:
 
 Handlers can optionally receive an `isWaiting: Boolean` parameter.  
 
+For none `suspend` handlers, `isWaiting` is always `true`. 
+
+For `suspend` handlers, `isWaiting` is:
 - `false` when using `dispatch`  
 - `true` when using `dispatchSuspend`
 
