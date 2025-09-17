@@ -537,13 +537,13 @@ class DefaultEventManager internal constructor(
     private fun <D : Dispatchable> bindListener(
         listener: Listener,
         function: KFunction<*>,
-        args: Array<KClass<*>>
+        args: () -> Array<KClass<*>>
     ): ListenerInvoker.CallHandler<D> {
         val reflection = ListenerInvoker.reflection()
         return if (invoker === reflection) reflection.bindListener(listener, function, args)
         else try {
             invoker.bindListener(listener, function, args)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             reflection.bindListener(listener, function, args)
         }
     }
@@ -905,7 +905,7 @@ class DefaultEventManager internal constructor(
         }
 
         private val handler: ListenerInvoker.CallHandler<E> by lazy {
-            manager.bindListener(listener, kFunction, argTypes)
+            manager.bindListener(listener, kFunction, ::argTypes)
         }
 
         @Suppress("UNCHECKED_CAST")
