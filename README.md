@@ -571,10 +571,10 @@ To get started:
 
 ```kotlin
 // Required API module
-implementation("com.fantamomo:k-event-api:1.0-SNAPSHOT")
+implementation("com.fantamomo:k-event-api:${api-version}")
 
 // Optional manager (JVM only for now)
-implementation("com.fantamomo:k-event-manager:1.0-SNAPSHOT")
+implementation("com.fantamomo:k-event-manager:${manager-version}")
 ```
 
 You can also include it as a source module directly in your project if needed.
@@ -625,6 +625,7 @@ You can use the `api` module even in shared/common codebases.
 
 ## Built by Fantamomo
 
-Version: **1.0-SNAPSHOT**
+API-Version: **1.6-SNAPSHOT**
+Manager-Version: **1.16-SNAPSHOT**
 
 Happy event handling!
