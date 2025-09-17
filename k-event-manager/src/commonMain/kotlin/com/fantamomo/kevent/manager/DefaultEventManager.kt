@@ -130,6 +130,9 @@ class DefaultEventManager internal constructor(
                 try {
                     if (method.isSuspend) {
                         var exception: InvocationTargetException? = null
+
+                        // Launch a coroutine using Dispatchers.Unconfined so that the code runs
+                        // immediately in the current thread. This avoids switching threads.
                         val job = scope.launch(Dispatchers.Unconfined) {
                             try {
                                 method.callSuspend(*args.toTypedArray())
@@ -140,6 +143,9 @@ class DefaultEventManager internal constructor(
                                 exception = e
                             }
                         }
+                        // Immediately cancel the coroutine.
+                        // Since we're using Unconfined, if a suspend point was reached, the coroutine
+                        // would switch threads, and cancellation ensures it doesn't continue execution.
                         job.cancel()
                         if (exception != null) throw exception
                     } else {
@@ -541,10 +547,11 @@ class DefaultEventManager internal constructor(
                 level = Level.SEVERE
             }
 
+        @Suppress("UNCHECKED_CAST")
         private fun <E : Dispatchable> ListenerParameterResolver<*>?.toStrategy(registered: RegisteredListener<E>): ArgStrategy<E> =
             when (this) {
-                IsWaitingParameterResolver -> WaitingStrategy()
-                IsStickyParameterResolver -> StickyStrategy()
+                IsWaitingParameterResolver -> WaitingStrategy
+                IsStickyParameterResolver -> StickyStrategy
                 ConfigParameterResolver -> ConfigStrategy(registered.configuration)
                 is ListenerParameterResolver<*> -> ResolverStrategy(
                     (registered as? RegisteredKFunctionListener)?.listener,
@@ -552,8 +559,8 @@ class DefaultEventManager internal constructor(
                     this
                 )
 
-                else -> NullStrategy()
-            }
+                else -> NullStrategy
+            } as ArgStrategy<E>
     }
 
     // -------------
@@ -995,12 +1002,12 @@ class DefaultEventManager internal constructor(
         fun resolve(event: E, isWaiting: Boolean, isSticky: Boolean): Any?
     }
 
-    private class WaitingStrategy<E : Dispatchable> : ArgStrategy<E> {
-        override fun resolve(event: E, isWaiting: Boolean, isSticky: Boolean) = isWaiting
+    private object WaitingStrategy : ArgStrategy<Dispatchable> {
+        override fun resolve(event: Dispatchable, isWaiting: Boolean, isSticky: Boolean) = isWaiting
     }
 
-    private class StickyStrategy<E : Dispatchable> : ArgStrategy<E> {
-        override fun resolve(event: E, isWaiting: Boolean, isSticky: Boolean) = isSticky
+    private object StickyStrategy : ArgStrategy<Dispatchable> {
+        override fun resolve(event: Dispatchable, isWaiting: Boolean, isSticky: Boolean) = isSticky
     }
 
     private class ConfigStrategy<E : Dispatchable>(
@@ -1018,8 +1025,8 @@ class DefaultEventManager internal constructor(
             resolver.resolve(listener, kFunction, event)
     }
 
-    private class NullStrategy<E : Dispatchable> : ArgStrategy<E> {
-        override fun resolve(event: E, isWaiting: Boolean, isSticky: Boolean) = null
+    private object NullStrategy : ArgStrategy<Dispatchable> {
+        override fun resolve(event: Dispatchable, isWaiting: Boolean, isSticky: Boolean) = null
     }
 
     // -------------------------
