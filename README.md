@@ -75,45 +75,47 @@ You can add any number of fields to an event. There are no restrictions on how c
 class GameListener : Listener
 ```
 
-Listeners are just normal Kotlin classes, but they implement the `Listener` interface, which is a **marker interface**.
-That means it doesn’t declare any methods — it’s only used to indicate that a class contains event handlers.
+Listeners in K-Event are just regular Kotlin classes that implement the `Listener` interface — a **marker interface**.  
+This means it doesn’t declare any methods; its sole purpose is to indicate that a class contains event handlers.
 
-Why use a marker interface?
+#### Why use a marker interface?
 
-* Makes it trivial to detect valid listeners via reflection
-* Prevents accidental registration of irrelevant classes
-* Keeps API surface clean and intuitive
+- Makes it easy to detect valid listeners via reflection
+- Prevents accidental registration of unrelated classes
+- Keeps the API surface clean and intuitive
 
-This fits Kotlin’s idiomatic style and avoids verbose base classes.
+This approach aligns with Kotlin’s idiomatic style and avoids the need for verbose base classes.
 
-> A Listener could be any Kotlin type, but we recommend `class` or `object`
+> A listener can be any Kotlin type (except annotations), but we recommend using a `class` or `object`.
 
 ---
 
 ### ⚠️ Handler Methods: Signature Requirements
 
-Handlers must follow a strict but simple signature:
+Event handler methods must follow a strict but straightforward signature:
 
 ```kotlin
 @Register
 fun onJoin(event: PlayerJoinedEvent?)
-```
+````
+
+#### Requirements
 
 * Must be annotated with `@Register`
-* Must have exactly **one** parameter (it could have more when using [parameter injection](#-parameter-injection))
-* The parameter must be nullable (when using custom configuration) and extend `Dispatchable`
-* Must not have the `@JvmStatic` annotation
+* Must have exactly **one** parameter (additional parameters are allowed only when using [parameter injection](#-parameter-injection))
+* The parameter must be **nullable** (for custom configuration) and extend `Dispatchable`
+* Must **not** be annotated with `@JvmStatic`
 
 #### Why nullable?
 
-K-Event calls each handler one time in registration with `null`, to extract the configuration.
+K-Event invokes each handler once during registration with `null` to extract configuration.
+If the parameter is non-nullable, it behaves as if using `emptyConfiguration`.
 
-If the parameter is non-nullable, it behaves the same as using `emptyConfiguration`.
+This design allows per-handler configuration without needing a separate config function or builder.
 
-This enables per-handler configuration without requiring a separate config function or builder.
-
-> Although listener methods can be open, we strongly advise against it as it may lead to unexpected errors.
-
+> Although listener methods can be open, it is strongly discouraged as it may lead to unexpected errors.  
+> Default parameter values are technically allowed, but they are ignored by the DefaultEventManager.  
+> Using `@JvmOverloads` can lead to unexpected errors when registering handlers.
 ---
 
 ### ⚖️ Configuration DSL
@@ -133,19 +135,18 @@ configuration(event) {
 
 > It is `inline`, so no lambda generation at runtime
 
-#### Options:
+#### Options
 
-* `priority`: Determines handler execution order. Higher runs first.
-* `disallowSubtypes`: If `true`, only matches this exact event class.
-* `exclusiveListenerProcessing`: Prevents this handler from running concurrently. 
-This applies per `SharedExclusiveExecution` instance.
-* `silent`: If `true`, the handler will not prevent `DeadEvent` from being emitted.
-* `ignoreStickyEvents`: If `true`, the handler will not receive sticky events.
-* `name`: Optional debug label for this method.
+- **`priority`**: Determines handler execution order. Higher values run first.
+- **`disallowSubtypes`**: If `true`, only matches this exact event class.
+- **`exclusiveListenerProcessing`**: Prevents this handler from running concurrently. Applies per `SharedExclusiveExecution` instance.
+- **`silent`**: If `true`, the handler will not prevent a `DeadEvent` from being emitted.
+- **`ignoreStickyEvents`**: If `true`, the handler will not receive sticky events.
+- **`name`**: Optional debug label for this method.
 
-The configuration is stored inside the manager’s registry and used every time this event is dispatched.
+The configuration is stored inside the manager’s registry and applied every time this event is dispatched.
 
-Using `emptyConfiguration(event)` is equivalent to using the default configuration (priority = 0, etc.).
+Using `emptyConfiguration(event)` is equivalent to using the default configuration (e.g., `priority = 0`, etc.).
 
 ---
 
@@ -194,50 +195,58 @@ Dispatch is synchronous by default — the method will return only after all han
 
 ### ⏳ Suspend Handlers and `dispatchSuspend`
 
-K-Event supports not only regular handlers but also **`suspend` handlers**.  
-The event system automatically detects whether a method is `suspend` and invokes it accordingly.
+K-Event supports both **regular** and **`suspend` handlers**. The event system automatically detects whether a handler is `suspend` and invokes it appropriately.
 
 #### Default behavior with `dispatch(...)`
 
-When `manager.dispatch(event)` is called, the system:
+When you call:
 
-1. Collects all handlers that should be invoked for the event.
+```kotlin
+manager.dispatch(event)
+```
+
+the system:
+
+1. Collects all handlers applicable to the event.
 2. Sorts them by their configured priority (highest first).
-3. Iterates through each handler in order:
-    - If the handler is **regular (non-suspend)**, it is invoked immediately in the current thread.
-    - If the handler is **`suspend`**, it is launched in a new coroutine starting on `Dispatchers.Unconfined`.
-   This allows the handler to begin execution immediately on the current thread—enabling it to modify the event before any further processing—then it.
+3. Invokes each handler in order:
+   - **Regular (non-suspend) handlers** are called immediately in the current thread.
+   - **`suspend` handlers** are launched in a new coroutine using `Dispatchers.Unconfined`.  
+     This lets the handler start immediately on the current thread, potentially modifying the event early, without blocking the overall dispatch process.
 
-This design lets suspend handlers start quickly and potentially mutate the event early, while the overall dispatch does not block on their completion.
+This approach allows suspend handlers to begin execution quickly while the dispatch itself does not wait for them to finish.
 
 ---
 
 #### Controlled execution with `dispatchSuspend(...)`
 
-Sometimes you need all handlers — including `suspend` ones — to **fully complete** before continuing.  
-That’s what:
+If you need all handlers — including `suspend` ones — to **complete before proceeding**, use:
 
 ```kotlin
 manager.dispatchSuspend(MyEvent(...))
-````
-
-is for.
+```
 
 In this mode:
 
-1. **All handlers** (regular & `suspend`) are executed in the **configured priority order**.
-2. If a `suspend` handler is encountered, the manager **waits** for it to complete before moving on.
-3. Only then will the next handler be invoked.
-
-The result: a deterministic sequence where each handler finishes before the next one starts.
-
-#### `isWaiting`
-
-Handlers can receive an injected `isWaiting: Boolean` parameter that indicates whether the caller is waiting for the handler to complete.
-This value is `false` when using `dispatch` and `true` when using `dispatchSuspend`.
+1. **All handlers** (regular and `suspend`) run in **priority order**.
+2. The manager **waits** for each `suspend` handler to finish before moving to the next handler.
+3. Handlers execute **sequentially**, ensuring deterministic behavior.
 
 ---
 
+#### `isWaiting`
+
+Handlers can optionally receive an `isWaiting: Boolean` parameter.  
+
+For none `suspend` handlers, `isWaiting` is always `true`. 
+
+For `suspend` handlers, `isWaiting` is:
+- `false` when using `dispatch`  
+- `true` when using `dispatchSuspend`
+
+This lets handlers know whether the caller is waiting for completion.
+
+---
 
 ### ✨ Custom Configuration Keys
 
@@ -429,13 +438,17 @@ class MyListener : Listener {
 }
 ```
 
-The `DefaultEventManager` **can not** check the generic type at runtime.
-In this case both of the listeners will be called when an event like `MyGenericEvent<Int>` is called.
-That is a problem because in `onMyEventString` we want the event with `String` but get it with `Int`.
+The `DefaultEventManager` **cannot** check generic types at runtime.  
+As a result, both listeners will be triggered for an event like `MyGenericEvent<Int>`.
 
-K-Event adds two new interfaces `GenericTypedEvent` and `SingleGenericTypedEvent`.
+This is problematic because `onMyEventString` expects an event with `String`, but it receives one with `Int`.
 
-> Listeners can use `*`, `out T`, `T` and `in T`
+To address this, K-Event introduces two new interfaces:
+
+- `GenericTypedEvent`
+- `SingleGenericTypedEvent`
+
+> Listeners can specify type parameters using `*`, `out T`, `T`, or `in T`.
 
 
 ```kotlin
@@ -496,16 +509,51 @@ There is also a new injectable parameter `isSticky: Boolean` that can be used to
 
 ---
 
+## Listener Invoker
+
+The **ListenerInvoker** is a core component of the event manager.
+It is responsible for binding `Listener` methods to events and invoking them during event processing.
+
+Listener methods can be invoked in two different ways:
+
+### 🔍 ReflectionListenerInvoker
+
+* Uses **Kotlin reflection** to dynamically call listener methods.
+* Supports both regular and `suspend` functions.
+* Acts as a **fallback** if another invoker fails during binding.
+* Easy to use, but generally slower compared to method handles.
+* The default invoker.
+
+```kotlin
+val invoker = ListenerInvoker.reflection()
+```
+
+### ⚡ MethodHandlerListenerInvoker
+
+* Uses the **Java MethodHandle API** for high-performance invocation.
+* Supports both regular and `suspend` listener methods.
+* By default relies on `MethodHandles.publicLookup()`.
+  Since listener methods must always be `public`, there is no need to create a private lookup in most cases.
+* **Limitations:** Cannot handle classes declared inside functions or anonymous classes when using the default `publicLookup()`.
+  In these cases, the system automatically falls back to the `ReflectionListenerInvoker`.
+  Private classes **can** be handled if a proper `MethodHandles.Lookup` is provided instead of the default.
+* Faster than reflection and recommended if performance is important.
+
+```kotlin
+val invoker = ListenerInvoker.methodHandler()
+```
+
+---
+
 ## Create EventManagers
 
-The default function for creating a `DefaultEventManager` is `EventManager`, but there is more.
+The default way to create a `DefaultEventManager` is via the `EventManager` function. However, you can customize it with additional components.
 
-The `EventManager` function takes Components, for example the default manager will ignore errors thrown in listeners,
-if you want to log these errors, you can use a `ExceptionHandler`.
+By default, the manager ignores errors thrown in listeners. If you want to handle or log these errors, you can provide an `ExceptionHandler`:
 
 ```kotlin
 object SysOutExceptionHandler : ExceptionHandler() {
-    override fun handle(exception: Throwable, listener: Listener?, methode: KFunction<*>?) {
+    override fun handle(exception: Throwable, listener: Listener?, method: KFunction<*>?) {
         exception.printStackTrace()
     }
 }
@@ -513,22 +561,26 @@ object SysOutExceptionHandler : ExceptionHandler() {
 val manager = EventManager(SysOutExceptionHandler)
 ```
 
-But there is more, do you want a custom injectable parameter.
+### Custom Parameters
+
+You can also inject custom parameters into listeners:
 
 ```kotlin
 val server: Server = ...
 
-val parameter = ListenerParameterResolver.static("server", Server::class, server)
+val staticParameter = ListenerParameterResolver.static("server", Server::class, server)
 val dynamicParameter = ListenerParameterResolver.dynamic("time", Instant::class) { Clock.System.now() }
 
-val manager = EventManager(parameter)
+val manager = EventManager(staticParameter + dynamicParameter)
 ```
 
 There are two types of `ListenerParameterResolver`:
 
-* `static`: The type does not change.
-* `dynamic`: The type can change (e.g. because of listeners).
-Note that a dynamic type **must** provide a default value (e.g. `0`, empty, ...), which is uses when registering a listener, so that the signatur is completed.
+* **static**: Value does not change.
+* **dynamic**: Value can change (e.g., depending on runtime conditions).  
+  A dynamic resolver **must** provide a default value (e.g., `0`, empty, etc.) for listener registration.
+
+Example usage in a listener:
 
 ```kotlin
 class ServerListener : Listener {
@@ -539,25 +591,35 @@ class ServerListener : Listener {
 }
 ```
 
-You can add as many `ListenerParameterResolver` as you want, but only one `ExceptionHandler`.
+You can add multiple `ListenerParameterResolver`s, but only **one** `ExceptionHandler` per manager.
 
-There is also a `SharedExclusiveExecution` component,
-which can be used to prevent concurrent execution of handlers, when the are using `exclusiveListenerProcessing`.
-Every EventManager has its own `SharedExclusiveExecution` instance,
-but you can override when adding it to the manager, via the `+` operator.
+---
 
-If you want to combine some components:
+### Shared Exclusive Execution
+
+The `SharedExclusiveExecution` component can prevent concurrent execution of handlers when using `exclusiveListenerProcessing`.  
+Each `EventManager` has its own `SharedExclusiveExecution` instance, but you can override it when adding it to the manager using the `+` operator.
+
+---
+
+### Combining Components
+
+You can combine multiple components when creating a manager:
 
 ```kotlin
 val sharedExecution = SharedExclusiveExecution()
+val invoker = ListenerInvoker.methodHandler()
 
 val manager = EventManager(
     SysOutExceptionHandler +
-            parameter +
-            dynamicParameter +
-            sharedExecution
+    staticParameter +
+    dynamicParameter +
+    sharedExecution +
+    invoker
 )
 ```
+
+For more on `ListenerInvoker`, see [Listener Invoker](#listener-invoker).
 
 ## 🎓 How to Add to Your Project
 
@@ -571,10 +633,10 @@ To get started:
 
 ```kotlin
 // Required API module
-implementation("com.fantamomo:k-event-api:1.0-SNAPSHOT")
+implementation("com.fantamomo:k-event-api:${api-version}")
 
 // Optional manager (JVM only for now)
-implementation("com.fantamomo:k-event-manager:1.0-SNAPSHOT")
+implementation("com.fantamomo:k-event-manager:${manager-version}")
 ```
 
 You can also include it as a source module directly in your project if needed.
@@ -625,6 +687,7 @@ You can use the `api` module even in shared/common codebases.
 
 ## Built by Fantamomo
 
-Version: **1.0-SNAPSHOT**
+API-Version: **1.6-SNAPSHOT**
+Manager-Version: **1.16-SNAPSHOT**
 
 Happy event handling!
