@@ -29,7 +29,7 @@ object ReflectionListenerInvoker : ListenerInvoker {
     override fun <D : Dispatchable> bindListener(
         listener: Listener,
         function: KFunction<*>,
-        args: Array<KClass<*>>,
+        args: () -> Array<KClass<*>>,
     ) = ReflectionCallHandler<D>(listener, function)
 
     /**

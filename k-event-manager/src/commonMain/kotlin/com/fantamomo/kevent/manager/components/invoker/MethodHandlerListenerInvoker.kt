@@ -29,12 +29,12 @@ class MethodHandlerListenerInvoker(
     override fun <D : Dispatchable> bindListener(
         listener: Listener,
         function: KFunction<*>,
-        args: Array<KClass<*>>,
+        args: () -> Array<KClass<*>>,
     ): ListenerInvoker.CallHandler<D> {
         val javaMethod = function.javaMethod
             ?: throw IllegalArgumentException("Function must be backed by a Java method")
 
-        val paramTypes = args.map { it.java }.toMutableList()
+        val paramTypes = args().map { it.java }.toMutableList()
 
         if (function.isSuspend) {
             paramTypes += Continuation::class.java

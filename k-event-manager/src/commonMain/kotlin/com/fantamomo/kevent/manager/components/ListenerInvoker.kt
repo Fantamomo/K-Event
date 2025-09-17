@@ -33,11 +33,14 @@ interface ListenerInvoker : EventManagerComponent<ListenerInvoker> {
      *
      * @param listener The listener that contains the method to be bound.
      * @param function The function from the listener to be bound to events.
-     * @param args An array of `KClass` instances representing the argument types expected by the function.
+     * @param args A function that returns an array of `KClass` instances representing
+     *             the function’s expected argument types. The use of a function allows
+     *             these types to be provided lazily. Not all implementations require args,
+     *             so this parameter may be ignored in some cases.
      * @return A `CallHandler` instance capable of invoking the listener's method with the appropriate arguments
      * when handling a dispatchable event.
      */
-    fun <D : Dispatchable> bindListener(listener: Listener, function: KFunction<*>, args: Array<KClass<*>>): CallHandler<D>
+    fun <D : Dispatchable> bindListener(listener: Listener, function: KFunction<*>, args: () -> Array<KClass<*>>): CallHandler<D>
 
     /**
      * Interface defining a handler for invoking operations on dispatchable entities.
