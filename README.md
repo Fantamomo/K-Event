@@ -75,18 +75,18 @@ You can add any number of fields to an event. There are no restrictions on how c
 class GameListener : Listener
 ```
 
-Listeners are just normal Kotlin classes, but they implement the `Listener` interface, which is a **marker interface**.
-That means it doesn’t declare any methods — it’s only used to indicate that a class contains event handlers.
+Listeners in K-Event are just regular Kotlin classes that implement the `Listener` interface — a **marker interface**.  
+This means it doesn’t declare any methods; its sole purpose is to indicate that a class contains event handlers.
 
-Why use a marker interface?
+#### Why use a marker interface?
 
-* Makes it trivial to detect valid listeners via reflection
-* Prevents accidental registration of irrelevant classes
-* Keeps API surface clean and intuitive
+- Makes it easy to detect valid listeners via reflection
+- Prevents accidental registration of unrelated classes
+- Keeps the API surface clean and intuitive
 
-This fits Kotlin’s idiomatic style and avoids verbose base classes.
+This approach aligns with Kotlin’s idiomatic style and avoids the need for verbose base classes.
 
-> A Listener could be any Kotlin type, but we recommend `class` or `object`
+> A listener can be any Kotlin type (except annotations), but we recommend using a `class` or `object`.
 
 ---
 
