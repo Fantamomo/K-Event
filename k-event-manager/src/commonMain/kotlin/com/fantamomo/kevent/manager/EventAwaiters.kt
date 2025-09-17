@@ -3,6 +3,7 @@ package com.fantamomo.kevent.manager
 import com.fantamomo.kevent.Dispatchable
 import com.fantamomo.kevent.EventConfiguration
 import com.fantamomo.kevent.Key
+import com.fantamomo.kevent.manager.internal.commonSuperClass
 import com.fantamomo.kevent.setIfAbsent
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.onFailure
@@ -297,10 +298,10 @@ suspend fun <D : Dispatchable> HandlerEventScope.awaitAnyEvent(
         // Single type → delegate to awaitEvent
         types.size == 1 -> awaitEvent(types[0] as KClass<Dispatchable>, configuration)
 
-        // Multiple types → listen for Dispatchable and check if class matches
+        // Multiple types → listen for a common subtype and check if class matches
         else -> suspendCancellableCoroutine { cont ->
             val events = types.toSet() // Allowed event classes
-            val handler = register(Dispatchable::class, configuration.setIfAbsent(Key.IGNORE_STICKY_EVENTS, true)) {
+            val handler = register(commonSuperClass(events) as KClass<Dispatchable>, configuration.setIfAbsent(Key.IGNORE_STICKY_EVENTS, true)) {
                 if (cont.isActive) {
                     if (events.contains(it::class)) {
                         cont.resume(it) // Resume once matching event is found
