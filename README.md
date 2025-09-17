@@ -92,28 +92,30 @@ This approach aligns with Kotlin’s idiomatic style and avoids the need for ver
 
 ### ⚠️ Handler Methods: Signature Requirements
 
-Handlers must follow a strict but simple signature:
+Event handler methods must follow a strict but straightforward signature:
 
 ```kotlin
 @Register
 fun onJoin(event: PlayerJoinedEvent?)
-```
+````
+
+#### Requirements
 
 * Must be annotated with `@Register`
-* Must have exactly **one** parameter (it could have more when using [parameter injection](#-parameter-injection))
-* The parameter must be nullable (when using custom configuration) and extend `Dispatchable`
-* Must not have the `@JvmStatic` annotation
+* Must have exactly **one** parameter (additional parameters are allowed only when using [parameter injection](#-parameter-injection))
+* The parameter must be **nullable** (for custom configuration) and extend `Dispatchable`
+* Must **not** be annotated with `@JvmStatic`
 
 #### Why nullable?
 
-K-Event calls each handler one time in registration with `null`, to extract the configuration.
+K-Event invokes each handler once during registration with `null` to extract configuration.
+If the parameter is non-nullable, it behaves as if using `emptyConfiguration`.
 
-If the parameter is non-nullable, it behaves the same as using `emptyConfiguration`.
+This design allows per-handler configuration without needing a separate config function or builder.
 
-This enables per-handler configuration without requiring a separate config function or builder.
-
-> Although listener methods can be open, we strongly advise against it as it may lead to unexpected errors.
-
+> Although listener methods can be open, it is strongly discouraged as it may lead to unexpected errors.  
+> Default parameter values are technically allowed, but they are ignored by the DefaultEventManager.  
+> Using `@JvmOverloads` can lead to unexpected errors when registering handlers.
 ---
 
 ### ⚖️ Configuration DSL
@@ -133,19 +135,18 @@ configuration(event) {
 
 > It is `inline`, so no lambda generation at runtime
 
-#### Options:
+#### Options
 
-* `priority`: Determines handler execution order. Higher runs first.
-* `disallowSubtypes`: If `true`, only matches this exact event class.
-* `exclusiveListenerProcessing`: Prevents this handler from running concurrently. 
-This applies per `SharedExclusiveExecution` instance.
-* `silent`: If `true`, the handler will not prevent `DeadEvent` from being emitted.
-* `ignoreStickyEvents`: If `true`, the handler will not receive sticky events.
-* `name`: Optional debug label for this method.
+- **`priority`**: Determines handler execution order. Higher values run first.
+- **`disallowSubtypes`**: If `true`, only matches this exact event class.
+- **`exclusiveListenerProcessing`**: Prevents this handler from running concurrently. Applies per `SharedExclusiveExecution` instance.
+- **`silent`**: If `true`, the handler will not prevent a `DeadEvent` from being emitted.
+- **`ignoreStickyEvents`**: If `true`, the handler will not receive sticky events.
+- **`name`**: Optional debug label for this method.
 
-The configuration is stored inside the manager’s registry and used every time this event is dispatched.
+The configuration is stored inside the manager’s registry and applied every time this event is dispatched.
 
-Using `emptyConfiguration(event)` is equivalent to using the default configuration (priority = 0, etc.).
+Using `emptyConfiguration(event)` is equivalent to using the default configuration (e.g., `priority = 0`, etc.).
 
 ---
 
@@ -194,50 +195,55 @@ Dispatch is synchronous by default — the method will return only after all han
 
 ### ⏳ Suspend Handlers and `dispatchSuspend`
 
-K-Event supports not only regular handlers but also **`suspend` handlers**.  
-The event system automatically detects whether a method is `suspend` and invokes it accordingly.
+K-Event supports both **regular** and **`suspend` handlers**. The event system automatically detects whether a handler is `suspend` and invokes it appropriately.
 
 #### Default behavior with `dispatch(...)`
 
-When `manager.dispatch(event)` is called, the system:
+When you call:
 
-1. Collects all handlers that should be invoked for the event.
+```kotlin
+manager.dispatch(event)
+```
+
+the system:
+
+1. Collects all handlers applicable to the event.
 2. Sorts them by their configured priority (highest first).
-3. Iterates through each handler in order:
-    - If the handler is **regular (non-suspend)**, it is invoked immediately in the current thread.
-    - If the handler is **`suspend`**, it is launched in a new coroutine starting on `Dispatchers.Unconfined`.
-   This allows the handler to begin execution immediately on the current thread—enabling it to modify the event before any further processing—then it.
+3. Invokes each handler in order:
+   - **Regular (non-suspend) handlers** are called immediately in the current thread.
+   - **`suspend` handlers** are launched in a new coroutine using `Dispatchers.Unconfined`.  
+     This lets the handler start immediately on the current thread, potentially modifying the event early, without blocking the overall dispatch process.
 
-This design lets suspend handlers start quickly and potentially mutate the event early, while the overall dispatch does not block on their completion.
+This approach allows suspend handlers to begin execution quickly while the dispatch itself does not wait for them to finish.
 
 ---
 
 #### Controlled execution with `dispatchSuspend(...)`
 
-Sometimes you need all handlers — including `suspend` ones — to **fully complete** before continuing.  
-That’s what:
+If you need all handlers — including `suspend` ones — to **complete before proceeding**, use:
 
 ```kotlin
 manager.dispatchSuspend(MyEvent(...))
-````
-
-is for.
+```
 
 In this mode:
 
-1. **All handlers** (regular & `suspend`) are executed in the **configured priority order**.
-2. If a `suspend` handler is encountered, the manager **waits** for it to complete before moving on.
-3. Only then will the next handler be invoked.
-
-The result: a deterministic sequence where each handler finishes before the next one starts.
-
-#### `isWaiting`
-
-Handlers can receive an injected `isWaiting: Boolean` parameter that indicates whether the caller is waiting for the handler to complete.
-This value is `false` when using `dispatch` and `true` when using `dispatchSuspend`.
+1. **All handlers** (regular and `suspend`) run in **priority order**.
+2. The manager **waits** for each `suspend` handler to finish before moving to the next handler.
+3. Handlers execute **sequentially**, ensuring deterministic behavior.
 
 ---
 
+#### `isWaiting`
+
+Handlers can optionally receive an `isWaiting: Boolean` parameter.  
+
+- `false` when using `dispatch`  
+- `true` when using `dispatchSuspend`
+
+This lets handlers know whether the caller is waiting for completion.
+
+---
 
 ### ✨ Custom Configuration Keys
 
