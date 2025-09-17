@@ -429,13 +429,17 @@ class MyListener : Listener {
 }
 ```
 
-The `DefaultEventManager` **can not** check the generic type at runtime.
-In this case both of the listeners will be called when an event like `MyGenericEvent<Int>` is called.
-That is a problem because in `onMyEventString` we want the event with `String` but get it with `Int`.
+The `DefaultEventManager` **cannot** check generic types at runtime.  
+As a result, both listeners will be triggered for an event like `MyGenericEvent<Int>`.
 
-K-Event adds two new interfaces `GenericTypedEvent` and `SingleGenericTypedEvent`.
+This is problematic because `onMyEventString` expects an event with `String`, but it receives one with `Int`.
 
-> Listeners can use `*`, `out T`, `T` and `in T`
+To address this, K-Event introduces two new interfaces:
+
+- `GenericTypedEvent`
+- `SingleGenericTypedEvent`
+
+> Listeners can specify type parameters using `*`, `out T`, `T`, or `in T`.
 
 
 ```kotlin
