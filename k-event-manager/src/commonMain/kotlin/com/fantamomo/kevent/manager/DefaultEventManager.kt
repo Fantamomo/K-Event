@@ -872,6 +872,21 @@ class DefaultEventManager internal constructor(
         override val handlerId: String =
             "RegisteredKFunctionListener@${type.jvmName}@${listener::class.jvmName}#${kFunction.hashCode()}"
 
+        private val argTypes: Array<KClass<*>> by lazy {
+            kFunction.parameters // Skip first two (listener, event)
+                .mapIndexed { index, param ->
+                    when (index) {
+                        0 -> listener::class
+                        1 -> type
+                        else -> resolvers[param]?.type ?: throw IllegalArgumentException(
+                            "Parameter '${param.name}' of function '${kFunction.name}' in ${listener::class.jvmName} " +
+                                    "has no resolver. Please specify a resolver using @ListenerParameterResolver."
+                        )
+                    }
+                }
+                .toTypedArray()
+        }
+
         @Suppress("UNCHECKED_CAST")
         /** Strategies for resolving additional parameters beyond the listener and event */
         private val extraStrategies: Array<ArgStrategy<E>> by lazy {
