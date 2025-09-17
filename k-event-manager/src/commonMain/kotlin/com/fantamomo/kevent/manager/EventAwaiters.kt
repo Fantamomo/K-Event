@@ -36,12 +36,15 @@ suspend fun <D : Dispatchable> HandlerEventScope.awaitEvent(
     event: KClass<D>,
     configuration: EventConfiguration<D> = EventConfiguration.default(),
 ): D = suspendCancellableCoroutine { cont ->
+    // Register a handler for the event type
     val handler = register(event, configuration.setIfAbsent(Key.IGNORE_STICKY_EVENTS, true)) { dispatchable ->
+        // Resume coroutine with the event when it is dispatched
         if (cont.isActive) {
             cont.resume(dispatchable)
         }
     }
 
+    // Ensure handler is unregistered when coroutine is cancelled
     cont.invokeOnCancellation {
         handler.unregister()
     }
@@ -85,7 +88,10 @@ suspend fun <D : Dispatchable> HandlerEventScope.awaitEventOrNull(
     event: KClass<D>,
     timeoutMillis: Long,
     configuration: EventConfiguration<D> = EventConfiguration.default(),
-): D? = withTimeoutOrNull(timeoutMillis) { awaitEvent(event, configuration) }
+): D? = withTimeoutOrNull(timeoutMillis) {
+    // Use awaitEvent but cancel if timeout is reached
+    awaitEvent(event, configuration)
+}
 
 /**
  * Suspends until a specific event of type [D] occurs within the given timeout.
@@ -123,14 +129,17 @@ suspend fun <D : Dispatchable> HandlerEventScope.awaitFilteredEvent(
     configuration: EventConfiguration<D> = EventConfiguration.default(),
     filter: (D) -> Boolean,
 ): D = suspendCancellableCoroutine { cont ->
+    // Register handler that applies filter to events
     val handler = register(event, configuration.setIfAbsent(Key.IGNORE_STICKY_EVENTS, true)) { dispatchable ->
         if (cont.isActive) {
+            // Resume only if event matches filter
             if (filter(dispatchable)) {
                 cont.resume(dispatchable)
             }
         }
     }
 
+    // Clean up handler when coroutine is cancelled
     cont.invokeOnCancellation {
         handler.unregister()
     }
@@ -171,10 +180,12 @@ fun <D : Dispatchable> HandlerEventScope.eventFlow(
     event: KClass<D>,
     configuration: EventConfiguration<D> = EventConfiguration.default(),
 ): Flow<D> = channelFlow {
+    // Register event handler and emit events into the channel
     val handler = register(event, configuration.setIfAbsent(Key.IGNORE_STICKY_EVENTS, true)) {
-        trySend(it).onFailure { close() }
+        trySend(it).onFailure { close() } // Try to send event, close if failed
     }
 
+    // Unregister handler when flow collection is cancelled
     awaitClose { handler.unregister() }
 }
 
@@ -226,15 +237,17 @@ suspend fun <D : Dispatchable> HandlerEventScope.awaitEvents(
     count: Int,
     configuration: EventConfiguration<D> = EventConfiguration.default(),
 ): List<D> = suspendCancellableCoroutine { cont ->
-    val events = mutableListOf<D>()
+    val events = mutableListOf<D>() // Store collected events
     val handler = register(type, configuration.setIfAbsent(Key.IGNORE_STICKY_EVENTS, true)) {
         if (cont.isActive) {
-            events.add(it)
+            events.add(it) // Add each event to list
             if (events.size >= count) {
+                // Resume coroutine once enough events are collected
                 cont.resume(events)
             }
         }
     }
+    // Cleanup when coroutine is cancelled
     cont.invokeOnCancellation { handler.unregister() }
 }
 
@@ -278,18 +291,24 @@ suspend fun <D : Dispatchable> HandlerEventScope.awaitAnyEvent(
 ): D {
     configuration as EventConfiguration<Dispatchable>
     return when {
+        // No types provided → wait for any Dispatchable
         types.isEmpty() -> awaitEvent<Dispatchable>(configuration)
+
+        // Single type → delegate to awaitEvent
         types.size == 1 -> awaitEvent(types[0] as KClass<Dispatchable>, configuration)
+
+        // Multiple types → listen for Dispatchable and check if class matches
         else -> suspendCancellableCoroutine { cont ->
-            val events = types.toSet()
+            val events = types.toSet() // Allowed event classes
             val handler = register(Dispatchable::class, configuration.setIfAbsent(Key.IGNORE_STICKY_EVENTS, true)) {
                 if (cont.isActive) {
                     if (events.contains(it::class)) {
-                        cont.resume(it)
+                        cont.resume(it) // Resume once matching event is found
                     }
                 }
             }
 
+            // Cleanup on cancellation
             cont.invokeOnCancellation { handler.unregister() }
         }
     } as D
