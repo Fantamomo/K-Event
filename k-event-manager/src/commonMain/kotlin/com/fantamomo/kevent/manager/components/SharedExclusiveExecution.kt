@@ -30,6 +30,14 @@ class SharedExclusiveExecution : EventManagerComponent<SharedExclusiveExecution>
     }
 
     /**
+     * Checks if the specified handler is currently locked.
+     *
+     * @param handlerId The unique identifier of the handler to check.
+     * @return `true` if the handler is locked; `false` otherwise.
+     */
+    fun isLocked(handlerId: String) = runningHandlers[handlerId]?.get() ?: false
+
+    /**
      * Releases the execution lock for the specified handler ID, allowing it to be acquired again.
      *
      * This method sets the internal flag associated with the provided handler ID to `false`,
