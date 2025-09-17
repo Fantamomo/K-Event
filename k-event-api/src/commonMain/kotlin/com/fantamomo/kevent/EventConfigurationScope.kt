@@ -31,7 +31,7 @@ package com.fantamomo.kevent
  * @since 1.0-SNAPSHOT
  */
 @EventDsl
-class EventConfigurationScope<E : KEventElement> : EventConfiguration<E> {
+class EventConfigurationScope<E : Dispatchable> : EventConfiguration<E> {
     /**
      * Internal storage for configuration data as key-value pairs.
      */

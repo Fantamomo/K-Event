@@ -11,7 +11,7 @@ package com.fantamomo.kevent
  * @param E The type of event this listener handles, extending [Dispatchable].
  * @since 1.2-SNAPSHOT
  */
-fun interface SimpleSuspendListener<E : KEventElement> : SimpleConfiguration<E> {
+fun interface SimpleSuspendListener<E : Dispatchable> : SimpleConfiguration<E> {
 
     /**
      * Asynchronously handles an event of type [E].
