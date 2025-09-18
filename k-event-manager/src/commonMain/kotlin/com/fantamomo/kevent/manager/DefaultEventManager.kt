@@ -13,6 +13,7 @@ import kotlinx.coroutines.*
 import java.lang.reflect.InaccessibleObjectException
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -737,22 +738,41 @@ class DefaultEventManager internal constructor(
 
                 val silent = handler.configuration.silent
                 if (handler.isSuspend) {
-                    // Run suspend handlers asynchronously in coroutine.
-                    // We use Dispatchers.Unconfined here to allow the handler to modify the event
-                    // before it is passed on, or the entire dispatch process is over
+                    val failed = AtomicBoolean(false) // Flag to track if the suspend handler failed
+
+                    // Run suspend handlers asynchronously in a coroutine.
+                    // Dispatchers.Unconfined is used so the handler can modify the event immediately
+                    // before the dispatch continues or completes.
+                    // Additionally: because of Dispatchers.Unconfined, we can still access the return value
+                    // before dispatch finishes. The handler returns false only if exclusiveListenerProcessing = true
+                    // and it is already running, meaning execution was refused.
+                    // Important: if exclusiveListenerProcessing is fine and the handler reaches a suspend point,
+                    // the scope.launch continues → we know the handler has started successfully.
                     scope.launch(Dispatchers.Unconfined) {
                         runCatching {
-                            handler.invokeSuspend(typedEvent, isWaiting = false, isSticky = false)
-                        }.onFailure { handleException(it, handler) }
+                            // Call the suspend handler
+                            val success = handler.invokeSuspend(typedEvent, isWaiting = false, isSticky = false)
+                            if (!success) failed.set(true) // Mark as failed/refused if handler returned false
+                        }.onFailure {
+                            // If an exception occurs, handle it and mark as failed
+                            handleException(it, handler)
+                            failed.set(true)
+                        }
                     }
-                    if (!silent) called = true
+
+                    // If not in silent mode and no failure/refusal detected, mark handler as called
+                    if (!silent && !failed.get()) called = true
                 } else {
                     try {
+                        // Call normal (non-suspend) handler directly
+                        // Returns false only if exclusiveListenerProcessing = true and handler is already running.
                         if (handler(typedEvent, false) && !silent) called = true
                     } catch (e: Throwable) {
+                        // Handle any exception thrown by the handler
                         handleException(e, handler)
                     }
                 }
+
             }
             return called
         }
