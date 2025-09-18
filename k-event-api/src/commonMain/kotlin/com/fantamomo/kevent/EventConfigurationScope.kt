@@ -31,11 +31,11 @@ package com.fantamomo.kevent
  * @since 1.0-SNAPSHOT
  */
 @EventDsl
-class EventConfigurationScope<E : Dispatchable> : EventConfiguration<E> {
-    /**
-     * Internal storage for configuration data as key-value pairs.
-     */
-    internal val data: MutableMap<Key<*>, Any?> = mutableMapOf()
+class EventConfigurationScope<E : Dispatchable> internal constructor(
+    internal val data: MutableMap<Key<*>, Any?>,
+) : EventConfiguration<E> {
+
+    constructor() : this(mutableMapOf())
 
     /**
      * Returns the value associated with the specified key, or `null` if not set.

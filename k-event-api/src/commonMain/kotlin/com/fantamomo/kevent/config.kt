@@ -62,6 +62,132 @@ inline fun <E : Dispatchable> configuration(event: E?, @EventDsl block: EventCon
 }
 
 /**
+ * Configures a listener’s event handler with custom options using its default configuration.
+ *
+ * This extension function is intended for listeners that implement both [Listener] and
+ * [ListenerConfiguration]. It provides a DSL to customize the handler’s configuration
+ * and behaves differently depending on the phase of execution:
+ *
+ * 1. **Initialization phase (event = null)**
+ *    - Converts the listener’s default configuration into an [EventConfigurationScope].
+ *    - Executes the given [block] in the context of that scope.
+ *    - Throws a [ConfigurationCapturedException] containing the resulting [EventConfiguration].
+ *      The registration system intercepts this exception to store the configuration.
+ *
+ * 2. **Runtime phase (event != null)**
+ *    - Simply returns without executing the block.
+ *    - The Kotlin contract guarantees that after this call, `event` is non-null.
+ *
+ * ### Example
+ * ```kotlin
+ * class MyListener : Listener, ListenerConfiguration {
+ *     override val defaultConfiguration: EventConfiguration<Dispatchable> = createConfigurationScope {
+ *         ignoreStickyEvents = true
+ *         exclusiveListenerProcessing = true
+ *     }
+ *
+ *     @Register
+ *     fun onMyEvent(event: MyEvent?) {
+ *         configuration(event) {
+ *             priority = Priority.LOWEST
+ *             exclusiveListenerProcessing = false
+ *         }
+ *
+ *         // At this point, `event` is guaranteed to be non-null
+ *         println(event.someProperty)
+ *     }
+ * }
+ * ```
+ *
+ * ### Kotlin Contracts
+ * Contracts are used to inform the compiler that if the function returns normally,
+ * `event` is non-null and that [block] is called at most once during initialization.
+ *
+ * @receiver The listener instance, which must implement both [Listener] and [ListenerConfiguration].
+ * @param event The event being handled. May be `null` during registration, never `null` at runtime.
+ * @param block A DSL block applied to the listener’s configuration scope for customizing options.
+ * @throws ConfigurationCapturedException During initialization, carrying the captured configuration.
+ *
+ * @see EventConfigurationScope
+ * @see ConfigurationCapturedException
+ * @see configuration
+ * @author Fantamomo
+ * @since 1.7-SNAPSHOT
+ */
+@Suppress("UNCHECKED_CAST")
+@Throws(ConfigurationCapturedException::class)
+@OptIn(ExperimentalContracts::class)
+@JvmSynthetic
+inline fun <E : Dispatchable, L> L.configuration(event: E?, @EventDsl block: EventConfigurationScope<E>.() -> Unit) where L : Listener, L : ListenerConfiguration {
+    contract {
+        returns() implies (event != null)
+        callsInPlace(block, InvocationKind.AT_MOST_ONCE)
+    }
+    if (event == null) {
+        val scope = this.defaultConfiguration.toScope() as EventConfigurationScope<E>
+        scope.block()
+        throw ConfigurationCapturedException(EventConfiguration(scope))
+    }
+}
+/**
+ * Applies the listener’s default configuration to an event.
+ *
+ * This function is intended for listeners that implement both [Listener] and [ListenerConfiguration].
+ * It ensures that the event can be safely used at runtime while providing the default
+ * [EventConfiguration] during registration.
+ *
+ * The behavior depends on the phase:
+ *
+ * 1. **Initialization phase (event = null)**
+ *    - Throws a [ConfigurationCapturedException] containing the listener’s [defaultConfiguration].
+ *      This allows the registration system to capture and store the configuration.
+ *
+ * 2. **Runtime phase (event != null)**
+ *    - Simply returns, guaranteeing via Kotlin contracts that the `event` is non-null
+ *      and safe to use.
+ *
+ * ### Example
+ * ```kotlin
+ * class MyListener : Listener, ListenerConfiguration {
+ *     override val defaultConfiguration: EventConfiguration<Dispatchable> = createConfigurationScope {
+ *         priority = Priority.LOWEST
+ *     }
+ *
+ *     @Register
+ *     fun onMyEvent(event: MyEvent?) {
+ *         this.defaultConfiguration(event)
+ *         println(event.someProperty) // event is guaranteed non-null
+ *     }
+ *
+ *     @Register
+ *     fun thisMethodDoesTheSame(event: MyEvent) {
+ *         println(event.someProperty)
+ *     }
+ * }
+ * ```
+ *
+ * ### Kotlin Contracts
+ * The contract declares that if this function returns normally, `event` is non-null.
+ *
+ * @receiver The listener instance implementing both [Listener] and [ListenerConfiguration].
+ * @param event The event being handled. May be `null` during registration, never `null` at runtime.
+ * @throws ConfigurationCapturedException During initialization, carrying the default configuration.
+ *
+ * @see ListenerConfiguration
+ * @see EventConfiguration
+ * @see ConfigurationCapturedException
+ * @since 1.7-SNAPSHOT
+ */
+@Suppress("NOTHING_TO_INLINE")
+@OptIn(ExperimentalContracts::class)
+@Throws(ConfigurationCapturedException::class)
+@JvmSynthetic
+inline fun <E : Dispatchable, L> L.defaultConfiguration(event: E?) where L : Listener, L : ListenerConfiguration {
+    contract { returns() implies (event != null) }
+    if (event == null) throw ConfigurationCapturedException(defaultConfiguration)
+}
+
+/**
  * Configures an event handler with default options.
  *
  * This function is a shorthand alternative to [configuration] when no custom

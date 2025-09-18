@@ -687,7 +687,7 @@ You can use the `api` module even in shared/common codebases.
 
 ## Built by Fantamomo
 
-API-Version: **1.6-SNAPSHOT**
-Manager-Version: **1.17-SNAPSHOT**
+API-Version: **1.7-SNAPSHOT**
+Manager-Version: **1.18-SNAPSHOT**
 
 Happy event handling!

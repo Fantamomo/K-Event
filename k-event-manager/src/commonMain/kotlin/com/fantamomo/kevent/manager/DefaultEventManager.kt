@@ -120,7 +120,7 @@ class DefaultEventManager internal constructor(
 
             // If event parameter is non-nullable, use default configuration
             if (!registered.kFunction.parameters[1].type.isMarkedNullable) {
-                newConfiguration = EventConfiguration.default()
+                newConfiguration = (listener as? ListenerConfiguration)?.defaultConfiguration ?: EventConfiguration.default()
             } else {
                 // Otherwise, call method with null to capture custom configuration via exception
                 val args = registered.kFunction.parameters.map { param ->
@@ -197,6 +197,8 @@ class DefaultEventManager internal constructor(
             return
         }
 
+        val defaultListenerConfig = (listener as? ListenerConfiguration)?.defaultConfiguration
+
         // Scan methods for @Register annotation
         out@ for (method in listenerClass.declaredMemberFunctions) {
             if (!method.hasAnnotation<Register>()) continue
@@ -262,7 +264,7 @@ class DefaultEventManager internal constructor(
 
             val defaultConfigOrCaptured: EventConfiguration<Dispatchable>? =
                 if (!parameters[1].type.isMarkedNullable) {
-                    EventConfiguration.default()
+                    defaultListenerConfig ?: EventConfiguration.default()
                 } else {
                     try {
                         method.isAccessible = true
