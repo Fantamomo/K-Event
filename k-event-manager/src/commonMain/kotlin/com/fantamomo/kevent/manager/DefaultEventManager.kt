@@ -50,7 +50,7 @@ class DefaultEventManager internal constructor(
     private val parameterResolver: List<ListenerParameterResolver<*>>
 
     // Shared lock management for exclusive listener execution
-    private val sharedExclusiveExecution = components.getOrThrow(SharedExclusiveExecution)
+    private val sharedExclusiveExecution = components[SharedExclusiveExecution] ?: SharedExclusiveExecution()
 
     // Coroutine scope for async dispatch; uses provided scope or default SupervisorJob
     private val scope: CoroutineScope =
