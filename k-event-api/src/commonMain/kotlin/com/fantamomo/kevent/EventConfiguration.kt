@@ -101,4 +101,9 @@ sealed interface EventConfiguration<E : Dispatchable> {
         override val size: Int
             get() = data.size
     }
+
+    fun toScope(): EventConfigurationScope<E> {
+        if (isEmpty()) return EventConfigurationScope()
+        return EventConfigurationScope(data.toMutableMap())
+    }
 }
