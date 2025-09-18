@@ -5,6 +5,7 @@ import com.fantamomo.kevent.manager.components.*
 import com.fantamomo.kevent.manager.config.DispatchConfig
 import com.fantamomo.kevent.manager.config.DispatchConfigKey
 import com.fantamomo.kevent.manager.internal.all
+import com.fantamomo.kevent.manager.internal.atomicModify
 import com.fantamomo.kevent.manager.internal.rethrowIfFatal
 import com.fantamomo.kevent.manager.settings.Settings
 import com.fantamomo.kevent.manager.settings.getSetting
@@ -589,12 +590,9 @@ class DefaultEventManager internal constructor(
         private val snapshot: AtomicReference<List<RegisteredListener<E>>> = AtomicReference(emptyList())
 
         fun add(listener: RegisteredListener<E>) {
-            while (true) {
-                val cur = snapshot.get() // Get current list
+            snapshot.atomicModify { cur ->
                 // Add listener and sort by priority (descending)
-                val next = (cur + listener).sortedByDescending { it.configuration.priority }
-                // Update list only if no other thread has changed it in the meantime
-                if (snapshot.compareAndSet(cur, next)) break
+                (cur + listener).sortedByDescending { it.configuration.priority }
             }
             // Immediately dispatch sticky events to the new listener if applicable
             dispatchSticky(listener)
@@ -627,41 +625,26 @@ class DefaultEventManager internal constructor(
         fun remove(listener: RegisteredListener<E>) = removeByIdentity(listener)
 
         fun remove(target: SimpleConfiguration<*>) {
-            while (true) {
-                val cur = snapshot.get()
+            snapshot.atomicModify { cur ->
                 // Filter out listeners associated with the given configuration
-                val next = cur.filterNot {
+                cur.filterNot {
                     (it as? RegisteredSimpleListener<E>)?.simpleListener === target ||
                             (it as? RegisteredSimpleSuspendListener<E>)?.simpleListener === target
                 }
-                // If nothing changed, stop
-                if (next.size == cur.size) return
-                // Otherwise, update atomically
-                if (snapshot.compareAndSet(cur, next)) return
             }
         }
 
         fun remove(target: Listener) {
-            while (true) {
-                val cur = snapshot.get()
+            snapshot.atomicModify { cur ->
                 // Remove listeners with exactly the same listener instance
-                val next = cur.filterNot { (it as? RegisteredKFunctionListener<E>)?.listener === target }
-                // If nothing changed, stop
-                if (next.size == cur.size) return
-                // Otherwise, update atomically
-                if (snapshot.compareAndSet(cur, next)) return
+                cur.filterNot { (it as? RegisteredKFunctionListener<E>)?.listener === target }
             }
         }
 
         private fun removeByIdentity(target: RegisteredListener<E>) {
-            while (true) {
-                val cur = snapshot.get()
+            snapshot.atomicModify { cur ->
                 // Remove only if the object instance is exactly the same (===)
-                val next = cur.filterNot { it === target }
-                // If nothing changed, stop
-                if (next.size == cur.size) return
-                // Otherwise, update atomically
-                if (snapshot.compareAndSet(cur, next)) return
+                cur.filterNot { it === target }
             }
         }
 
