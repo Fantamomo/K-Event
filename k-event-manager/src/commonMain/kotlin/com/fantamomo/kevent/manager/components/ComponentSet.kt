@@ -16,12 +16,30 @@ package com.fantamomo.kevent.manager.components
  * @author Fantamomo
  * @since 1.0-SNAPSHOT
  */
-class ComponentSet internal constructor(internal val components: Set<EventManagerComponent<*>>) : EventManagerComponent<ComponentSet> {
+class ComponentSet internal constructor(internal val components: Set<EventManagerComponent<*>>) : EventManagerComponent<ComponentSet>, Iterable<EventManagerComponent<*>> {
     override val key: EventManagerComponent.Key<ComponentSet> = Key
 
     internal object Key : EventManagerComponent.Key<ComponentSet> {
         override val clazz = ComponentSet::class
     }
+
+    /**
+     * Provides the total number of components contained within this [ComponentSet].
+     *
+     * @since 1.18-SNAPSHOT
+     */
+    val size get() = components.size
+
+    /**
+     * Checks if the current `ComponentSet` is empty.
+     *
+     * @return `true` if the `ComponentSet` has no components, otherwise `false`.
+     *
+     * @since 1.18-SNAPSHOT
+     */
+    fun isEmpty() = components.isEmpty()
+
+    override fun iterator() = components.iterator()
 
     companion object {
         /**

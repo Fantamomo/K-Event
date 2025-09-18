@@ -5,7 +5,6 @@ import com.fantamomo.kevent.manager.components.*
 import com.fantamomo.kevent.manager.config.DispatchConfig
 import com.fantamomo.kevent.manager.config.DispatchConfigKey
 import com.fantamomo.kevent.manager.internal.all
-import com.fantamomo.kevent.manager.internal.atomicModify
 import com.fantamomo.kevent.manager.internal.rethrowIfFatal
 import com.fantamomo.kevent.manager.settings.Settings
 import com.fantamomo.kevent.manager.settings.getSetting
@@ -14,6 +13,7 @@ import kotlinx.coroutines.*
 import java.lang.reflect.InaccessibleObjectException
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -50,7 +50,7 @@ class DefaultEventManager internal constructor(
     private val parameterResolver: List<ListenerParameterResolver<*>>
 
     // Shared lock management for exclusive listener execution
-    private val sharedExclusiveExecution = components.getOrThrow(SharedExclusiveExecution)
+    private val sharedExclusiveExecution = components[SharedExclusiveExecution] ?: SharedExclusiveExecution()
 
     // Coroutine scope for async dispatch; uses provided scope or default SupervisorJob
     private val scope: CoroutineScope =
@@ -538,7 +538,7 @@ class DefaultEventManager internal constructor(
     private fun <D : Dispatchable> bindListener(
         listener: Listener,
         function: KFunction<*>,
-        args: () -> Array<KClass<*>>
+        args: () -> Array<KClass<*>>,
     ): ListenerInvoker.CallHandler<D> {
         val reflection = ListenerInvoker.reflection()
         return if (invoker === reflection) reflection.bindListener(listener, function, args)
@@ -586,147 +586,215 @@ class DefaultEventManager internal constructor(
     // -------------
     private inner class HandlerBucket<E : Dispatchable> {
 
-        // Holds the current list of registered listeners atomically (thread-safe)
-        private val snapshot: AtomicReference<List<RegisteredListener<E>>> = AtomicReference(emptyList())
+        // Holder keeps both the unsorted (raw) list and an optional cached sorted view.
+        // If sorted == null, it means the list is "dirty" and needs to be re-sorted on next access.
+        private inner class Holder(
+            val raw: List<RegisteredListener<E>>,
+            val sorted: List<RegisteredListener<E>>? = null,
+        )
+
+        private val holder = AtomicReference(Holder(emptyList(), emptyList()))
+
+        // ------------------------------
+        // Add / Remove
+        // ------------------------------
 
         fun add(listener: RegisteredListener<E>) {
-            snapshot.atomicModify { cur ->
-                // Add listener and sort by priority (descending)
-                (cur + listener).sortedByDescending { it.configuration.priority }
-            }
-            // Immediately dispatch sticky events to the new listener if applicable
+            // Just append to raw list; mark sorted view as dirty (null).
+            holder.getAndUpdate { h -> Holder(h.raw + listener) }
+            // Immediately dispatch sticky events to the new listener.
             dispatchSticky(listener)
         }
 
-        private fun dispatchSticky(listener: RegisteredListener<E>) {
-            // Skip if listener is configured to ignore sticky events
-            if (listener.configuration.ignoreStickyEvents) return
-            for ((type, event) in stickyEvents) {
-                @Suppress("UNCHECKED_CAST")
-                event as E
-
-                // Event type must be a subclass of listener type
-                if (!type.isSubclassOf(listener.type)) continue
-
-                // If subtypes are disallowed, types must match exactly
-                if (listener.configuration.disallowSubtypes && type != listener.type) continue
-
-                // Call the listener — either suspendable or normal
-                if (listener.isSuspend) {
-                    scope.launch(Dispatchers.Unconfined) {
-                        listener.invokeSuspend(event, isWaiting = false, isSticky = true)
-                    }
-                } else {
-                    listener.invoke(event, true)
-                }
-            }
+        fun remove(listener: RegisteredListener<E>) {
+            // Remove by identity (===) and mark sorted as dirty.
+            holder.getAndUpdate { h -> Holder(h.raw.filterNot { it === listener }) }
         }
 
-        fun remove(listener: RegisteredListener<E>) = removeByIdentity(listener)
-
         fun remove(target: SimpleConfiguration<*>) {
-            snapshot.atomicModify { cur ->
-                // Filter out listeners associated with the given configuration
-                cur.filterNot {
-                    (it as? RegisteredSimpleListener<E>)?.simpleListener === target ||
-                            (it as? RegisteredSimpleSuspendListener<E>)?.simpleListener === target
-                }
+            // Remove all listeners bound to this SimpleConfiguration.
+            holder.getAndUpdate { h ->
+                Holder(
+                    h.raw.filterNot {
+                        (it as? RegisteredSimpleListener<E>)?.simpleListener === target ||
+                                (it as? RegisteredSimpleSuspendListener<E>)?.simpleListener === target
+                    }
+                )
             }
         }
 
         fun remove(target: Listener) {
-            snapshot.atomicModify { cur ->
-                // Remove listeners with exactly the same listener instance
-                cur.filterNot { (it as? RegisteredKFunctionListener<E>)?.listener === target }
+            // Remove listeners that match the given Listener instance.
+            holder.getAndUpdate { h ->
+                Holder(h.raw.filterNot { (it as? RegisteredKFunctionListener<E>)?.listener === target })
             }
         }
 
-        private fun removeByIdentity(target: RegisteredListener<E>) {
-            snapshot.atomicModify { cur ->
-                // Remove only if the object instance is exactly the same (===)
-                cur.filterNot { it === target }
+        fun close() {
+            // Clear all listeners (both raw and sorted).
+            holder.set(Holder(emptyList(), emptyList()))
+        }
+
+        // ------------------------------
+        // Internal: Lazy sorted access
+        // ------------------------------
+
+        private fun getOrderedListeners(): List<RegisteredListener<E>> {
+            while (true) {
+                val cur = holder.get()
+                val cached = cur.sorted
+                if (cached != null) return cached // Already sorted → return cached list.
+
+                // Compute sorted view by priority (descending).
+                val sorted = cur.raw.sortedByDescending { it.configuration.priority }
+                val updated = Holder(cur.raw, sorted)
+
+                // Try to update atomically. If CAS fails, another thread modified raw → retry.
+                if (holder.compareAndSet(cur, updated)) return sorted
             }
         }
 
-        fun existListener(clazz: KClass<out Listener>) =
-            snapshot.get()
-                .any { (it as? RegisteredKFunctionListener<E>)?.listener?.let { l -> l::class == clazz } ?: false }
+        // ------------------------------
+        // Sticky Dispatch
+        // ------------------------------
+
+        private fun dispatchSticky(listener: RegisteredListener<E>) {
+            if (listener.configuration.ignoreStickyEvents) return
+
+            for ((type, event) in stickyEvents) {
+                @Suppress("UNCHECKED_CAST")
+                val typedEvent = event as E
+
+                // Type must be compatible.
+                if (!type.isSubclassOf(listener.type)) continue
+                if (listener.configuration.disallowSubtypes && type != listener.type) continue
+
+                // Call suspend or regular listener accordingly.
+                if (listener.isSuspend) {
+                    scope.launch(Dispatchers.Default) {
+                        runCatching {
+                            listener.invokeSuspend(typedEvent, isWaiting = false, isSticky = true)
+                        }.onFailure { handleException(it, listener) }
+                    }
+                } else {
+                    runCatching {
+                        listener.invoke(typedEvent, true)
+                    }.onFailure { handleException(it, listener) }
+                }
+            }
+        }
+
+        // ------------------------------
+        // Lookup helpers
+        // ------------------------------
+
+        fun existListener(clazz: KClass<out Listener>): Boolean =
+            holder.get().raw.any {
+                (it as? RegisteredKFunctionListener<*>)?.listener?.let { l -> l::class == clazz } == true
+            }
 
         @Suppress("UNCHECKED_CAST")
         fun findAllListeners(clazz: KClass<out Listener>): List<RegisteredKFunctionListener<*>> {
+            // Only keep the *first* unique instance of a given class.
+            val ordered = getOrderedListeners()
+            val result = mutableListOf<RegisteredKFunctionListener<*>>()
             var firstMatch: Listener? = null
-            return snapshot.get().filter { registered ->
-                (registered as? RegisteredKFunctionListener<E>)?.listener?.let {
-                    // Keep only the first instance of a given listener type
-                    if (it::class != clazz) return@filter true
-                    if (firstMatch == null) firstMatch = it
-                    it === firstMatch
-                } ?: false
-            } as List<RegisteredKFunctionListener<*>>
+
+            for (registered in ordered) {
+                val k = registered as? RegisteredKFunctionListener<E> ?: continue
+                if (k.listener::class != clazz) continue
+                if (firstMatch == null) {
+                    firstMatch = k.listener
+                    result += k
+                } else if (k.listener === firstMatch) {
+                    // If the exact same listener instance is duplicated, keep it.
+                    result += k
+                }
+            }
+            return result
         }
 
+        // ------------------------------
+        // Dispatch: Sync & Suspend
+        // ------------------------------
+
         fun call(event: Dispatchable, genericTypes: List<KClass<*>>): Boolean {
-            val list = snapshot.get()
+            val list = getOrderedListeners()
             if (list.isEmpty()) return false
 
             @Suppress("UNCHECKED_CAST")
             val typedEvent = event as E
             var called = false
+
             for (handler in list) {
-                // If subtypes are disallowed, types must match exactly
-                if (handler.configuration.disallowSubtypes) {
-                    if (typedEvent::class != handler.type) continue
-                }
-                // Check generic type compatibility if applicable
-                if (event::class == handler.type && genericTypes.isNotEmpty() &&
+                // Subtype restrictions.
+                if (handler.configuration.disallowSubtypes && typedEvent::class != handler.type) continue
+                // Generic type restrictions.
+                if (typedEvent::class == handler.type &&
+                    genericTypes.isNotEmpty() &&
                     handler is RegisteredKFunctionListener<E> &&
                     !handler.allowGenericTypes(genericTypes)
                 ) continue
 
                 val silent = handler.configuration.silent
                 if (handler.isSuspend) {
-                    // Execute suspend listeners in a coroutine
-                    // We use Dispatchers.Unconfined here to allow the handler to modify the event
-                    // before it is passed on, or the entire dispatch process is over
+                    val failed = AtomicBoolean(false) // Flag to track if the suspend handler failed
+
+                    // Run suspend handlers asynchronously in a coroutine.
+                    // Dispatchers.Unconfined is used so the handler can modify the event immediately
+                    // before the dispatch continues or completes.
+                    // Additionally: because of Dispatchers.Unconfined, we can still access the return value
+                    // before dispatch finishes. The handler returns false only if exclusiveListenerProcessing = true
+                    // and it is already running, meaning execution was refused.
+                    // Important: if exclusiveListenerProcessing is fine and the handler reaches a suspend point,
+                    // the scope.launch continues → we know the handler has started successfully.
                     scope.launch(Dispatchers.Unconfined) {
-                        try {
-                            handler.invokeSuspend(typedEvent, isWaiting = false, isSticky = false)
-                        } catch (e: Throwable) {
-                            handleException(e, handler)
+                        runCatching {
+                            // Call the suspend handler
+                            val success = handler.invokeSuspend(typedEvent, isWaiting = false, isSticky = false)
+                            if (!success) failed.set(true) // Mark as failed/refused if handler returned false
+                        }.onFailure {
+                            // If an exception occurs, handle it and mark as failed
+                            handleException(it, handler)
+                            failed.set(true)
                         }
                     }
-                    if (!silent) called = true
+
+                    // If not in silent mode and no failure/refusal detected, mark handler as called
+                    if (!silent && !failed.get()) called = true
                 } else {
-                    // Execute regular listeners synchronously
                     try {
+                        // Call normal (non-suspend) handler directly
+                        // Returns false only if exclusiveListenerProcessing = true and handler is already running.
                         if (handler(typedEvent, false) && !silent) called = true
                     } catch (e: Throwable) {
+                        // Handle any exception thrown by the handler
                         handleException(e, handler)
                     }
                 }
+
             }
             return called
         }
 
         suspend fun callSuspend(event: Dispatchable, genericTypes: List<KClass<*>>): Boolean {
-            val list = snapshot.get()
+            val list = getOrderedListeners()
             if (list.isEmpty()) return false
 
             @Suppress("UNCHECKED_CAST")
             val typedEvent = event as E
             var called = false
+
             for (handler in list) {
-                // If subtypes are disallowed, types must match exactly
                 if (handler.configuration.disallowSubtypes && typedEvent::class != handler.type) continue
-                // Check generic type compatibility if applicable
-                if (event::class == handler.type && genericTypes.isNotEmpty() &&
+                if (typedEvent::class == handler.type &&
+                    genericTypes.isNotEmpty() &&
                     handler is RegisteredKFunctionListener<E> &&
                     !handler.allowGenericTypes(genericTypes)
                 ) continue
 
                 val silent = handler.configuration.silent
                 try {
-                    // Call depending on whether the listener is suspendable
                     val success = if (handler.isSuspend) {
                         handler.invokeSuspend(typedEvent, isWaiting = true, isSticky = false)
                     } else {
@@ -738,10 +806,6 @@ class DefaultEventManager internal constructor(
                 }
             }
             return called
-        }
-
-        fun close() {
-            snapshot.set(emptyList())
         }
     }
 
