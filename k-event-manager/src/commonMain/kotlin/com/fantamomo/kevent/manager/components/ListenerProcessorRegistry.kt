@@ -22,6 +22,8 @@ sealed interface ListenerProcessorRegistry : EventManagerComponent<ListenerProce
     fun init(listenerClass: KClass<out Listener>)
     fun fullInit()
 
+    operator fun contains(listenerClass: KClass<out Listener>): Boolean
+
     companion object Key : EventManagerComponent.Key<ListenerProcessorRegistry> {
         override val clazz = ListenerProcessorRegistry::class
 
@@ -33,6 +35,7 @@ sealed interface ListenerProcessorRegistry : EventManagerComponent<ListenerProce
         override fun getRegistry(listenerClass: KClass<out Listener>): EventHandlerRegistry? = null
         override fun init(listenerClass: KClass<out Listener>) {}
         override fun fullInit() {}
+        override fun contains(listenerClass: KClass<out Listener>) = false
     }
 
     class Default internal constructor() : ListenerProcessorRegistry {
@@ -93,6 +96,11 @@ sealed interface ListenerProcessorRegistry : EventManagerComponent<ListenerProce
             val localProvided = providedListeners ?: return
             localProvided.keys.forEach { init(it) }
             finished = true
+        }
+
+        override fun contains(listenerClass: KClass<out Listener>): Boolean {
+            load()
+            return providedListeners?.containsKey(listenerClass) ?: false
         }
     }
 }
