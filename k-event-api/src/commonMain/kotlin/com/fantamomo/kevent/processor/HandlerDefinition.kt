@@ -1,5 +1,7 @@
 package com.fantamomo.kevent.processor
 
+import com.fantamomo.kevent.Dispatchable
+import com.fantamomo.kevent.Listener
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 
@@ -25,13 +27,13 @@ import kotlin.reflect.KFunction
 @InternalProcessorApi
 data class HandlerDefinition(
     /** The class that contains the event listener method. */
-    val listener: KClass<*>,
+    val listener: KClass<out Listener>,
 
     /** The method in the listener class that handles the event. */
     val method: KFunction<*>,
 
     /** The type of event that this handler listens to. */
-    val event: KClass<*>,
+    val event: KClass<out Dispatchable>,
 
     /** The parameters of the handler method, wrapped in [ParameterDefinition]. */
     val args: Array<ParameterDefinition>,
