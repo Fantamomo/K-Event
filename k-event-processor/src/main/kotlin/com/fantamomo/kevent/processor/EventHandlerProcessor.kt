@@ -56,8 +56,8 @@ class EventHandlerProcessor(
                 val argsArray = if (params.size > 1) {
                     params.drop(1).joinToString(", ") { p ->
                         val pname = (p.annotations.firstOrNull {
-                            it.shortName.asString() == "com.fantamomo.kevent.utils.InjectionName"
-                        }?.arguments?.firstOrNull()?.value as? String) ?: p.name?.asString() ?: throw IllegalArgumentException("Parameter ${p.name?.asString()} has no name!")
+                            it.annotationType.resolve().declaration.qualifiedName?.asString() == "com.fantamomo.kevent.utils.InjectionName"
+                        }?.arguments?.firstOrNull { it.name?.asString() == "value" }?.value as? String) ?: p.name?.asString() ?: throw IllegalArgumentException("Parameter ${p.name?.asString()} has no name!")
                         val ptype = p.type.resolve().declaration.qualifiedName?.asString() ?: "kotlin.Any"
                         "ParameterDefinition(\"$pname\", $ptype::class)"
                     }
