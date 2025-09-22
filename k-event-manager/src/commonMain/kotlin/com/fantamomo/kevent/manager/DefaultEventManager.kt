@@ -62,7 +62,7 @@ class DefaultEventManager internal constructor(
     private val invoker: ListenerInvoker = components.getOrThrow(ListenerInvoker.Key)
 
     // ListenerProcessorRegistry for optimized listener registration due to K-Event-Processor
-    private val listenerProcessorRegistry = components[ListenerProcessorRegistry] ?: ListenerProcessorRegistry.Empty
+    private val listenerProcessorRegistry = components[ListenerProcessorRegistry.Key] ?: ListenerProcessorRegistry.Empty
 
     // Indicates if manager has been closed (no more registration/dispatch possible)
     private var isClosed = false
