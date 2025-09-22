@@ -8,6 +8,7 @@ import com.fantamomo.kevent.manager.internal.all
 import com.fantamomo.kevent.manager.internal.rethrowIfFatal
 import com.fantamomo.kevent.manager.settings.Settings
 import com.fantamomo.kevent.manager.settings.getSetting
+import com.fantamomo.kevent.processor.InternalProcessorApi
 import com.fantamomo.kevent.utils.InjectionName
 import kotlinx.coroutines.*
 import java.lang.reflect.InaccessibleObjectException
@@ -58,6 +59,9 @@ class DefaultEventManager internal constructor(
 
     // Invoker for calling the methods from Listener
     private val invoker: ListenerInvoker = components.getOrThrow(ListenerInvoker.Key)
+
+    // ListenerProcessorRegistry for optimized listener registration due to K-Event-Processor
+    private val listenerProcessorRegistry = components[ListenerProcessorRegistry] ?: ListenerProcessorRegistry.Empty
 
     // Indicates if manager has been closed (no more registration/dispatch possible)
     private var isClosed = false
@@ -120,7 +124,8 @@ class DefaultEventManager internal constructor(
 
             // If event parameter is non-nullable, use default configuration
             if (!registered.kFunction.parameters[1].type.isMarkedNullable) {
-                newConfiguration = (listener as? ListenerConfiguration)?.defaultConfiguration ?: EventConfiguration.default()
+                newConfiguration =
+                    (listener as? ListenerConfiguration)?.defaultConfiguration ?: EventConfiguration.default()
             } else {
                 // Otherwise, call method with null to capture custom configuration via exception
                 val args = registered.kFunction.parameters.map { param ->
@@ -187,9 +192,135 @@ class DefaultEventManager internal constructor(
         }
     }
 
+    @OptIn(InternalProcessorApi::class)
+    private fun registerWithProcessor(clazz: KClass<out Listener>, listener: Listener): Boolean {
+        val registry = listenerProcessorRegistry.getRegistry(clazz) ?: return false
+
+        val defaultListenerConfig = (listener as? ListenerConfiguration)?.defaultConfiguration
+
+        out@ for (handler in registry.listeners) {
+            check(handler.listener == clazz) { "Handler for $clazz is not the same as the given listener." }
+
+            val method = handler.method
+
+            val resolvers = handler.args.mapIndexed { index, param ->
+                parameterResolver.find { it.name == param.name && it.type == param.type } ?: run {
+                    exceptionHandler("onParameterHasNoResolver") {
+                        val parameter = method.parameters[index + 2]
+                        onParameterHasNoResolver(
+                            listener,
+                            method,
+                            parameter,
+                            parameter.findAnnotation<InjectionName>()?.value ?: parameter.name!!,
+                            parameter.type
+                        )
+                    }
+                    return false
+                }
+            }
+
+            @Suppress("UNCHECKED_CAST")
+            val typedEventClass = handler.event as KClass<Dispatchable>
+
+            // Prepare arguments for capturing config if nullable
+            val args = (0..(resolvers.size + 2)).map { index ->
+                when (index) {
+                    0 -> listener
+                    1 -> null
+                    else -> resolvers[index-2].valueByConfiguration
+                }
+            }
+
+            val defaultConfigOrCaptured: EventConfiguration<Dispatchable>? =
+                if (handler.isNullable) {
+                    defaultListenerConfig ?: EventConfiguration.default()
+                } else {
+                    try {
+                        method.isAccessible = true
+                        if (handler.isSuspend) {
+                            var exception: InvocationTargetException? = null
+
+                            // Launch a coroutine using Dispatchers.Unconfined so that the code runs
+                            // immediately in the current thread. This avoids switching threads.
+                            val job = scope.launch(Dispatchers.Unconfined) {
+                                try {
+                                    method.callSuspend(*args.toTypedArray())
+                                    exceptionHandler("onMethodDidNotThrowConfiguredException") {
+                                        onMethodDidNotThrowConfiguredException(listener, method)
+                                    }
+                                } catch (e: InvocationTargetException) {
+                                    exception = e
+                                }
+                            }
+                            // Immediately cancel the coroutine.
+                            // Since we're using Unconfined, if a suspend point was reached, the coroutine
+                            // would switch threads, and cancellation ensures it doesn't continue execution.
+                            job.cancel()
+                            if (exception != null) throw exception
+                        } else {
+                            method.call(*args.toTypedArray())
+                            exceptionHandler("onMethodDidNotThrowConfiguredException") {
+                                onMethodDidNotThrowConfiguredException(listener, method)
+                            }
+                        }
+                        null
+                    } catch (_: InaccessibleObjectException) {
+                        exceptionHandler("onMethodNotAccessible") { onMethodNotAccessible(listener, method) }
+                        null
+                    } catch (e: InvocationTargetException) {
+                        // Check if method threw captured configuration
+                        val config = (e.targetException as? ConfigurationCapturedException)?.configuration
+                        if (config !is EventConfiguration<*>) {
+                            exceptionHandler("onMethodThrewUnexpectedException") {
+                                onMethodThrewUnexpectedException(listener, method, e.targetException)
+                            }
+                            null
+                        } else {
+                            @Suppress("UNCHECKED_CAST")
+                            config as EventConfiguration<Dispatchable>
+                        }
+                    } catch (t: Throwable) {
+                        t.rethrowIfFatal()
+                        exceptionHandler("onUnexpectedExceptionDuringRegistration") {
+                            onUnexpectedExceptionDuringRegistration(listener, method, t)
+                        }
+                        null
+                    }
+                }
+
+            if (defaultConfigOrCaptured == null) continue@out
+
+            try {
+                method.isAccessible = true
+            } catch (_: InaccessibleObjectException) {
+                exceptionHandler("onMethodNotAccessible") { onMethodNotAccessible(listener, method) }
+                continue@out
+            }
+
+            // Wrap into RegisteredKFunctionListener and store
+            val handler = RegisteredKFunctionListener(
+                type = typedEventClass,
+                listener = listener,
+                kFunction = method,
+                configuration = defaultConfigOrCaptured,
+                resolvers = TODO(),
+                manager = this,
+            )
+            getOrCreateHandlerBucket(typedEventClass).add(handler)
+        }
+        return true
+    }
+
     override fun register(listener: Listener) {
         checkClosed()
         val listenerClass = listener::class
+
+        // If the K-Event-Processor was used, we use more efficient registration
+        if (listenerClass in listenerProcessorRegistry) {
+            if (registerWithProcessor(listenerClass, listener)) {
+                return
+            }
+        }
 
         // If we already have methods from this class, just rebind
         if (existListener(listenerClass)) {
