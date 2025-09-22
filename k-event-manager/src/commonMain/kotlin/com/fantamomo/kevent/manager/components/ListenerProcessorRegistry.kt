@@ -17,6 +17,8 @@ sealed interface ListenerProcessorRegistry : EventManagerComponent<ListenerProce
 
     override val key get() = Key
 
+    val avaibleListeners: Set<KClass<out Listener>>
+
     fun load()
     fun getRegistry(listenerClass: KClass<out Listener>): EventHandlerRegistry?
     fun init(listenerClass: KClass<out Listener>)
@@ -24,13 +26,17 @@ sealed interface ListenerProcessorRegistry : EventManagerComponent<ListenerProce
 
     operator fun contains(listenerClass: KClass<out Listener>): Boolean
 
-    companion object Key : EventManagerComponent.Key<ListenerProcessorRegistry> {
-        override val clazz = ListenerProcessorRegistry::class
-
+    companion object {
         fun create(): ListenerProcessorRegistry = Default()
     }
 
+    object Key : EventManagerComponent.Key<ListenerProcessorRegistry> {
+        override val clazz = ListenerProcessorRegistry::class
+    }
+
     object Empty : ListenerProcessorRegistry {
+        override val avaibleListeners: Set<KClass<out Listener>> = setOf()
+
         override fun load() {}
         override fun getRegistry(listenerClass: KClass<out Listener>): EventHandlerRegistry? = null
         override fun init(listenerClass: KClass<out Listener>) {}
@@ -49,6 +55,11 @@ sealed interface ListenerProcessorRegistry : EventManagerComponent<ListenerProce
 
         @Volatile
         private var finished = false
+
+        override val avaibleListeners: Set<KClass<out Listener>> by lazy {
+            load()
+            providedListeners?.keys ?: setOf()
+        }
 
         override fun load() {
             if (finished) return
