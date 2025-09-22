@@ -8,6 +8,7 @@ import com.fantamomo.kevent.manager.internal.all
 import com.fantamomo.kevent.manager.internal.rethrowIfFatal
 import com.fantamomo.kevent.manager.settings.Settings
 import com.fantamomo.kevent.manager.settings.getSetting
+import com.fantamomo.kevent.processor.HandlerDefinition
 import com.fantamomo.kevent.processor.InternalProcessorApi
 import com.fantamomo.kevent.utils.InjectionName
 import kotlinx.coroutines.*
@@ -132,7 +133,10 @@ class DefaultEventManager internal constructor(
                     when (param.index) {
                         0 -> listener // "this" for the function
                         1 -> null // event argument is null
-                        else -> registered.resolvers[param]?.valueByConfiguration
+                        else -> when (registered) {
+                            is RegisteredKFunctionListenerNormal -> registered.resolvers[param]?.valueByConfiguration
+                            is RegisteredKFunctionListenerProcessor -> registered.resolvers.getOrNull(param.index - 2)?.valueByConfiguration
+                        }
                     }
                 }
                 val method = registered.kFunction
@@ -180,14 +184,7 @@ class DefaultEventManager internal constructor(
             if (newConfiguration == null) continue@out
 
             // Replace with a new instance bound to this listener
-            val new = RegisteredKFunctionListener(
-                registered.type,
-                listener,
-                registered.kFunction,
-                newConfiguration,
-                registered.resolvers,
-                this
-            )
+            val new = registered.withNewListener(listener)
             getOrCreateHandlerBucket(registered.type).add(new)
         }
     }
@@ -227,7 +224,7 @@ class DefaultEventManager internal constructor(
                 when (index) {
                     0 -> listener
                     1 -> null
-                    else -> resolvers[index-2].valueByConfiguration
+                    else -> resolvers[index - 2].valueByConfiguration
                 }
             }
 
@@ -298,12 +295,13 @@ class DefaultEventManager internal constructor(
             }
 
             // Wrap into RegisteredKFunctionListener and store
-            val handler = RegisteredKFunctionListener(
+            val handler = RegisteredKFunctionListenerProcessor(
                 type = typedEventClass,
                 listener = listener,
                 kFunction = method,
                 configuration = defaultConfigOrCaptured,
-                resolvers = TODO(),
+                resolvers = resolvers,
+                handlerDefinition = handler,
                 manager = this,
             )
             getOrCreateHandlerBucket(typedEventClass).add(handler)
@@ -460,7 +458,7 @@ class DefaultEventManager internal constructor(
             }
 
             // Wrap into RegisteredKFunctionListener and store
-            val handler = RegisteredKFunctionListener(
+            val handler = RegisteredKFunctionListenerNormal(
                 type = typedEventClass,
                 listener = listener,
                 kFunction = method,
@@ -1041,82 +1039,38 @@ class DefaultEventManager internal constructor(
         }
     }
 
-    private class RegisteredKFunctionListener<E : Dispatchable>(
+    private sealed class RegisteredKFunctionListener<E : Dispatchable>(
         type: KClass<E>,
         val listener: Listener,
         val kFunction: KFunction<*>,
         configuration: EventConfiguration<E>,
-        val resolvers: Map<KParameter, ListenerParameterResolver<*>>,
         manager: DefaultEventManager,
     ) : RegisteredListener<E>(type, configuration, manager) {
+        protected abstract val argTypes: Array<KClass<*>>
 
-        /** Reference to the event parameter (2nd parameter of the function: listener, event, ...) */
-        val eventParameter = kFunction.parameters[1]
-
-        /** The actual Kotlin type of the event parameter */
-        private val actualType = eventParameter.type
-
-        /** Lazy-loaded list of type arguments (if the event type is generic) */
-        private val typeArguments by lazy { actualType.arguments }
-
-        /** Checks if the event parameter has type arguments */
-        private val hasTypeArguments: Boolean by lazy { typeArguments.any { it.type != null } }
-
-        /** Whether this is a suspend function */
-        override val isSuspend: Boolean = kFunction.isSuspend
-
-        /** Unique identifier for the handler (used for exclusive processing) */
-        override val handlerId: String =
-            "RegisteredKFunctionListener@${type.jvmName}@${listener::class.jvmName}#${kFunction.hashCode()}"
-
-        private val argTypes: Array<KClass<*>> by lazy {
-            kFunction.parameters // Skip first two (listener, event)
-                .mapIndexed { index, param ->
-                    when (index) {
-                        0 -> listener::class
-                        1 -> type
-                        else -> resolvers[param]?.type ?: throw IllegalArgumentException(
-                            "Parameter '${param.name}' of function '${kFunction.name}' in ${listener::class.jvmName} " +
-                                    "has no resolver. Please specify a resolver using @ListenerParameterResolver."
-                        )
-                    }
-                }
-                .toTypedArray()
-        }
-
-        private val handler: ListenerInvoker.CallHandler<E> by lazy {
+        protected val handler: ListenerInvoker.CallHandler<E> by lazy {
             manager.bindListener(listener, kFunction, ::argTypes)
         }
 
-        @Suppress("UNCHECKED_CAST")
-        /** Strategies for resolving additional parameters beyond the listener and event */
-        private val extraStrategies: Array<ArgStrategy<E>> by lazy {
-            kFunction.parameters.drop(2) // Skip first two (listener, event)
-                .map { param ->
-                    resolvers[param].toStrategy(this) // Create resolution strategy for each extra parameter
-                }
-                .toTypedArray()
-        }
+        protected abstract val actualType: KType
 
-        /** Non-suspend invocation of the function */
+        protected val typeArguments by lazy { actualType.arguments }
+
+        protected val hasTypeArguments: Boolean by lazy { typeArguments.any { it.type != null } }
+
+
+        protected abstract fun buildArgs(event: E, isWaiting: Boolean, isSticky: Boolean): Array<Any?>
+
         override fun invokeInternal(event: E, isSticky: Boolean) {
             val args = buildArgs(event, true, isSticky)
             handler.invoke(event, args)
         }
 
-        /** Suspend invocation of the function */
         override suspend fun invokeSuspendInternal(event: E, isWaiting: Boolean, isSticky: Boolean) {
             val args = buildArgs(event = event, isWaiting = isWaiting, isSticky = isSticky)
             handler.invokeSuspend(event, args)
         }
 
-        /** Builds the full argument array for the function call */
-        private fun buildArgs(event: E, isWaiting: Boolean, isSticky: Boolean): Array<Any?> =
-            Array(extraStrategies.size) { index ->
-                extraStrategies[index].resolve(event, isWaiting, isSticky)
-            }
-
-        /** Checks whether the provided generic types are allowed for this listener */
         fun allowGenericTypes(types: List<KClass<*>>): Boolean {
             if (!hasTypeArguments) return true // If no generics, always allow
             if (typeArguments.size != types.size) return false // Must have matching number of type arguments
@@ -1137,6 +1091,113 @@ class DefaultEventManager internal constructor(
                 }
             }.all() // All type argument checks must pass
         }
+
+        @Suppress("UNCHECKED_CAST")
+        abstract val extraStrategies: Array<ArgStrategy<E>>
+
+        abstract fun withNewListener(newListener: Listener): RegisteredKFunctionListener<E>
+    }
+
+    @OptIn(InternalProcessorApi::class)
+    private class RegisteredKFunctionListenerProcessor<E : Dispatchable>(
+        type: KClass<E>,
+        listener: Listener,
+        kFunction: KFunction<*>,
+        configuration: EventConfiguration<E>,
+        val resolvers: List<ListenerParameterResolver<*>>,
+        val handlerDefinition: HandlerDefinition,
+        manager: DefaultEventManager,
+    ) : RegisteredKFunctionListener<E>(type, listener, kFunction, configuration, manager) {
+        override val argTypes: Array<KClass<*>> by lazy {
+            Array(2 + handlerDefinition.args.size) { index ->
+                when (index) {
+                    0 -> listener::class
+                    1 -> type
+                    else -> handlerDefinition.args[index - 2].type
+                }
+            }
+        }
+        override val actualType: KType by lazy {
+            kFunction.parameters[1].type
+        }
+
+        override fun buildArgs(
+            event: E,
+            isWaiting: Boolean,
+            isSticky: Boolean,
+        ): Array<Any?> = Array(extraStrategies.size) { index ->
+            extraStrategies[index].resolve(event, isWaiting, isSticky)
+        }
+
+        override val extraStrategies: Array<ArgStrategy<E>> by lazy {
+            handlerDefinition.args
+                .mapIndexed { index, _ ->
+                    resolvers[index].toStrategy(this) // Create resolution strategy for each extra parameter
+                }
+                .toTypedArray()
+        }
+
+        override fun withNewListener(newListener: Listener) = RegisteredKFunctionListenerProcessor(
+            type, newListener, kFunction, configuration, resolvers, handlerDefinition, manager
+        )
+
+        override val handlerId: String =
+            "RegisteredKFunctionListenerProcessor@${type.jvmName}@${listener::class.jvmName}#${kFunction.hashCode()}"
+    }
+
+    private class RegisteredKFunctionListenerNormal<E : Dispatchable>(
+        type: KClass<E>,
+        listener: Listener,
+        kFunction: KFunction<*>,
+        configuration: EventConfiguration<E>,
+        val resolvers: Map<KParameter, ListenerParameterResolver<*>>,
+        manager: DefaultEventManager,
+    ) : RegisteredKFunctionListener<E>(type, listener, kFunction, configuration, manager) {
+
+        /** Reference to the event parameter (2nd parameter of the function: listener, event, ...) */
+        val eventParameter = kFunction.parameters[1]
+
+        override val actualType: KType = eventParameter.type
+
+        /** Unique identifier for the handler (used for exclusive processing) */
+        override val handlerId: String =
+            "RegisteredKFunctionListenerNormal@${type.jvmName}@${listener::class.jvmName}#${kFunction.hashCode()}"
+
+        override val argTypes: Array<KClass<*>> by lazy {
+            kFunction.parameters // Skip first two (listener, event)
+                .mapIndexed { index, param ->
+                    when (index) {
+                        0 -> listener::class
+                        1 -> type
+                        else -> resolvers[param]?.type ?: throw IllegalArgumentException(
+                            "Parameter '${param.name}' of function '${kFunction.name}' in ${listener::class.jvmName} " +
+                                    "has no resolver. Please specify a resolver using @ListenerParameterResolver."
+                        )
+                    }
+                }
+                .toTypedArray()
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        /** Strategies for resolving additional parameters beyond the listener and event */
+        override val extraStrategies: Array<ArgStrategy<E>> by lazy {
+            kFunction.parameters.drop(2) // Skip first two (listener, event)
+                .map { param ->
+                    resolvers[param].toStrategy(this) // Create resolution strategy for each extra parameter
+                }
+                .toTypedArray()
+        }
+
+        override fun withNewListener(newListener: Listener) = RegisteredKFunctionListenerNormal(
+            type, newListener, kFunction, configuration, resolvers, manager
+        )
+
+        /** Builds the full argument array for the function call */
+        override fun buildArgs(event: E, isWaiting: Boolean, isSticky: Boolean): Array<Any?> =
+            Array(extraStrategies.size) { index ->
+                extraStrategies[index].resolve(event, isWaiting, isSticky)
+            }
+
     }
 
     @Suppress("UNCHECKED_CAST")
