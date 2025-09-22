@@ -312,6 +312,6 @@ class DefaultEventManagerTest {
         manager.dispatch(TestEvent("Check Injection"))
 
         assertSame(manager, listener.receivedManager)
-        assertFalse(listener.receivedIsWaiting != false)
+        assertEquals(listener.receivedIsWaiting, true)
     }
 }
